@@ -5,7 +5,8 @@ description: Baseline UI standards for this platform — consistency, minimalism
 
 # UI standards
 
-Baseline rules for every screen. For rules about not looking AI-generated, see
+Baseline rules for every screen. Colors, fonts, and logo usage come from
+`.agents/skills/brand-identity/SKILL.md`. For rules about not looking AI-generated, see
 `.agents/skills/anti-ai-ui/SKILL.md`.
 
 ## Rules
@@ -17,16 +18,17 @@ Baseline rules for every screen. For rules about not looking AI-generated, see
    black on pure white, no saturated backgrounds. Dark mode is dark grey, not `#000`.
 3. **Responsive.** Mobile and desktop are distinct layouts. Removing, collapsing, or
    replacing components on phone view is expected, not a compromise.
-4. **Tailwind for standard components.** Tables, buttons, forms, lists, modals, menus
-   come from Tailwind utilities or the Tailwind component set already in the repo.
-   Don't reinvent primitives.
+4. **Tailwind + shadcn/ui for standard components.** Tables, buttons, forms, lists,
+   modals, and menus come from shadcn/ui and Tailwind utilities. Don't reinvent
+   primitives.
 5. **Smooth transitions.** Page navigation, modals, drawers, tabs, and accordions animate
    in and out. Nothing pops, jumps, or shifts layout mid-render.
 
 ## Details
 
 ### Consistency
-- Define colors, spacing, radii, and type in tokens (Tailwind theme) and use only those.
+- Define colors, spacing, radii, and type in tokens (Tailwind theme) and use only those;
+  brand colors are `azure`, `ink`, `wood`, `parchment`.
 - Keep component variants centralized (a `cva`/variant map or shared classes) instead of
   copy-pasted class strings that drift between pages.
 - Reuse existing page layouts and headers rather than inventing a new shell per route.
@@ -55,6 +57,6 @@ Baseline rules for every screen. For rules about not looking AI-generated, see
 - [ ] Colors, type, spacing, and components match the rest of the platform.
 - [ ] One primary action per view; nothing competing for attention.
 - [ ] Phone layout is purpose-built and works at 360px with real data.
-- [ ] Standard components are Tailwind-based, not hand-rolled.
+- [ ] Standard components are shadcn/ui + Tailwind, not hand-rolled.
 - [ ] Navigation, modals, and expanding sections animate smoothly both ways.
 - [ ] Hover / focus / disabled / empty / error / loading states all exist.
