@@ -1,6 +1,16 @@
 import { z } from "zod";
 
-export const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+export const dateKey = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/)
+  .refine((value) => {
+    const year = Number(value.slice(0, 4));
+    return year >= 1900 && year <= 2999;
+  });
+
+export const timestamp = z.coerce
+  .date()
+  .refine((value) => value.getFullYear() >= 1900 && value.getFullYear() <= 2999);
 
 export const routineInput = z.object({
   title: z.string().trim().min(1).max(200),

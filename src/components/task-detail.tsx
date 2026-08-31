@@ -13,6 +13,12 @@ import { toDateKey, today } from "@/lib/dates";
 import { type ListItem, priorities, type StepItem, type TaskItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+// A native date input fires change on every keystroke, so partial years like 0026 arrive here.
+function isCompleteDateKey(value: string) {
+  const year = Number(value.slice(0, 4));
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && year >= 1900 && year <= 2999;
+}
+
 export const selectClass =
   "border-input h-8 w-full rounded-lg border bg-transparent px-2 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
 
@@ -34,12 +40,17 @@ export function TaskDetail({
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [step, setStep] = useState("");
+  const [due, setDue] = useState("");
 
   useEffect(() => {
     setTitle(task?.title ?? "");
     setNotes(task?.notes ?? "");
     setStep("");
   }, [task?.id, task?.title, task?.notes]);
+
+  useEffect(() => {
+    setDue(task?.dueAt ? toDateKey(new Date(task.dueAt)) : "");
+  }, [task?.id, task?.dueAt]);
 
   if (!task) return null;
 
@@ -55,6 +66,21 @@ export function TaskDetail({
     }
 
     onChange(task, { title: trimmed }, { title: trimmed });
+  }
+
+  function commitDue(value: string) {
+    if (!task) return;
+
+    if (value && !isCompleteDateKey(value)) {
+      setDue(task.dueAt ? toDateKey(new Date(task.dueAt)) : "");
+      return;
+    }
+
+    const dueAt = value ? new Date(`${value}T12:00:00`).toISOString() : null;
+
+    if (dueAt === task.dueAt) return;
+
+    onChange(task, { dueAt }, { dueAt });
   }
 
   function commitNotes() {
@@ -236,13 +262,12 @@ export function TaskDetail({
               <Input
                 id="task-due"
                 type="date"
-                value={task.dueAt ? toDateKey(new Date(task.dueAt)) : ""}
+                value={due}
                 onChange={(event) => {
-                  const dueAt = event.target.value
-                    ? new Date(`${event.target.value}T12:00:00`).toISOString()
-                    : null;
-                  onChange(task, { dueAt }, { dueAt });
+                  setDue(event.target.value);
+                  if (isCompleteDateKey(event.target.value)) commitDue(event.target.value);
                 }}
+                onBlur={(event) => commitDue(event.target.value)}
               />
             </div>
 
