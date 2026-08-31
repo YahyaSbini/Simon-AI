@@ -138,7 +138,7 @@ export function TaskList({ initialTasks }: { initialTasks: TaskItem[] }) {
                 variant="ghost"
                 size="icon"
                 aria-label={`Delete "${item.title}"`}
-                className="opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                className="transition-opacity md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
                 onClick={() => deleteTask(item)}
               >
                 <Trash2 className="size-4" />
