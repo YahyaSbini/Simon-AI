@@ -9,7 +9,7 @@ export default async function HomePage() {
   const session = await getSession();
 
   if (session) {
-    redirect("/tasks");
+    redirect("/my-day");
   }
 
   return (

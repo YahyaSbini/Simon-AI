@@ -43,7 +43,7 @@ export function AuthForm() {
       return;
     }
 
-    router.push("/tasks");
+    router.push("/my-day");
     router.refresh();
   }
 

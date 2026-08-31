@@ -7,7 +7,7 @@ export default async function SignInPage() {
   const session = await getSession();
 
   if (session) {
-    redirect("/tasks");
+    redirect("/my-day");
   }
 
   return (

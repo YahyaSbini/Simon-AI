@@ -2,13 +2,18 @@ import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { task } from "@/db/schema";
+import { list, task } from "@/db/schema";
 import { requireUserId } from "@/lib/session";
+import { dateKey, timestamp } from "@/lib/validation";
 
 const updateTaskSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
   notes: z.string().trim().max(2000).nullish(),
-  dueAt: z.coerce.date().nullish(),
+  listId: z.string().uuid().nullish(),
+  priority: z.enum(["none", "low", "medium", "high"]).optional(),
+  estimatedMinutes: z.number().int().min(1).max(1440).nullish(),
+  dueAt: timestamp.nullish(),
+  myDayDate: dateKey.nullish(),
   completed: z.boolean().optional(),
 });
 
@@ -29,6 +34,17 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
   const { completed, ...fields } = parsed.data;
   const { id } = await params;
+
+  if (fields.listId) {
+    const [owned] = await db
+      .select({ id: list.id })
+      .from(list)
+      .where(and(eq(list.id, fields.listId), eq(list.userId, userId)));
+
+    if (!owned) {
+      return NextResponse.json({ error: "List not found." }, { status: 404 });
+    }
+  }
 
   const [updated] = await db
     .update(task)
