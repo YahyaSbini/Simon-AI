@@ -3,8 +3,12 @@ import { headers } from "next/headers";
 import { db } from "@/db";
 import { account } from "@/db/schema";
 import { auth, calendarScope, googleConfigured } from "@/lib/auth";
-import { fromDateKey } from "@/lib/dates";
-import type { CalendarEvent, CalendarStatus } from "@/lib/types";
+import { dayRangeIn } from "@/lib/timezone";
+import type {
+  CalendarAgenda,
+  CalendarEvent,
+  CalendarStatus,
+} from "@/lib/types";
 
 type GoogleEvent = {
   id: string;
@@ -43,14 +47,20 @@ export async function getCalendarStatus(
 }
 
 /** Events from the user's primary Google calendar for a single local day. */
-export async function getCalendarEvents(
+export async function getCalendarAgenda(
   userId: string,
   date: string,
-): Promise<CalendarEvent[]> {
-  if (!googleConfigured) return [];
+  timeZone: string,
+): Promise<CalendarAgenda> {
+  if (!googleConfigured) {
+    return { connected: false, failed: false, events: [] };
+  }
 
   const row = await findGoogleAccount(userId);
-  if (!row || !row.scope?.includes(calendarScope)) return [];
+
+  if (!row || !row.scope?.includes(calendarScope)) {
+    return { connected: false, failed: false, events: [] };
+  }
 
   let accessToken: string;
 
@@ -61,12 +71,10 @@ export async function getCalendarEvents(
     });
     accessToken = token.accessToken;
   } catch {
-    return [];
+    return { connected: true, failed: true, events: [] };
   }
 
-  const start = fromDateKey(date);
-  const end = new Date(start);
-  end.setDate(end.getDate() + 1);
+  const { start, end } = dayRangeIn(date, timeZone);
 
   const url = new URL(
     "https://www.googleapis.com/calendar/v3/calendars/primary/events",
@@ -76,17 +84,20 @@ export async function getCalendarEvents(
   url.searchParams.set("singleEvents", "true");
   url.searchParams.set("orderBy", "startTime");
   url.searchParams.set("maxResults", "50");
+  url.searchParams.set("timeZone", timeZone);
 
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${accessToken}` },
     cache: "no-store",
   });
 
-  if (!response.ok) return [];
+  if (!response.ok) {
+    return { connected: true, failed: true, events: [] };
+  }
 
   const payload = (await response.json()) as { items?: GoogleEvent[] };
 
-  return (payload.items ?? [])
+  const events: CalendarEvent[] = (payload.items ?? [])
     .filter((item) => item.status !== "cancelled")
     .map((item) => ({
       id: item.id,
@@ -97,4 +108,6 @@ export async function getCalendarEvents(
       location: item.location ?? null,
       url: item.htmlLink ?? null,
     }));
+
+  return { connected: true, failed: false, events };
 }

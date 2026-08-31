@@ -55,6 +55,13 @@ export type CalendarEvent = {
   url: string | null;
 };
 
+export type CalendarAgenda = {
+  connected: boolean;
+  /** Google was reachable but the request failed. */
+  failed: boolean;
+  events: CalendarEvent[];
+};
+
 export type CalendarStatus = {
   /** Whether Google OAuth credentials are set on the server. */
   configured: boolean;

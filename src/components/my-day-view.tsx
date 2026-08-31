@@ -8,19 +8,24 @@ import { PriorityDot, TaskMeta } from "@/components/task-view";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatMinutes } from "@/lib/dates";
-import type { CalendarEvent, RoutineOccurrence, TaskItem } from "@/lib/types";
+import type {
+  CalendarAgenda,
+  CalendarEvent,
+  RoutineOccurrence,
+  TaskItem,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function MyDayView({
   date,
   initialTasks,
   initialRoutines,
-  events,
+  agenda,
 }: {
   date: string;
   initialTasks: TaskItem[];
   initialRoutines: RoutineOccurrence[];
-  events: CalendarEvent[];
+  agenda: CalendarAgenda;
 }) {
   const [tasks, setTasks] = useState(initialTasks);
   const [routines, setRoutines] = useState(initialRoutines);
@@ -89,12 +94,10 @@ export function MyDayView({
     });
   }
 
-  if (tasks.length === 0 && routines.length === 0 && events.length === 0) {
+  if (tasks.length === 0 && routines.length === 0 && !agenda.connected) {
     return (
       <div className="border-border space-y-3 rounded-lg border border-dashed px-4 py-10 text-center">
-        <p className="text-muted-foreground">
-          Nothing planned for today yet.
-        </p>
+        <p className="text-muted-foreground">Nothing planned for today yet.</p>
         <Button variant="outline" render={<Link href="/tasks" />}>
           Pick from Tasks
         </Button>
@@ -104,7 +107,7 @@ export function MyDayView({
 
   return (
     <div className="space-y-6">
-      {events.length > 0 && <Agenda events={events} />}
+      {agenda.connected && <Agenda agenda={agenda} />}
 
       {(tasks.length > 0 || routines.length > 0) && (
         <p className="text-muted-foreground text-sm">
@@ -116,7 +119,10 @@ export function MyDayView({
 
       <ul className="divide-border divide-y">
         {routines.map((item) => (
-          <li key={`routine-${item.id}`} className="flex items-center gap-3 py-2.5">
+          <li
+            key={`routine-${item.id}`}
+            className="flex items-center gap-3 py-2.5"
+          >
             <Checkbox
               checked={item.completed}
               onCheckedChange={() => toggleRoutine(item)}
@@ -147,7 +153,10 @@ export function MyDayView({
         ))}
 
         {tasks.map((item) => (
-          <li key={`task-${item.id}`} className="flex items-center gap-3 py-2.5">
+          <li
+            key={`task-${item.id}`}
+            className="flex items-center gap-3 py-2.5"
+          >
             <Checkbox
               checked={item.completed}
               onCheckedChange={() => toggleTask(item)}
@@ -172,15 +181,22 @@ export function MyDayView({
   );
 }
 
-function Agenda({ events }: { events: CalendarEvent[] }) {
+function Agenda({ agenda }: { agenda: CalendarAgenda }) {
   return (
     <section className="space-y-2">
       <h2 className="text-muted-foreground flex items-center gap-1.5 text-xs tracking-wide uppercase">
         <CalendarDays className="size-3.5" />
         Schedule
       </h2>
+      {agenda.events.length === 0 && (
+        <p className="text-muted-foreground text-sm">
+          {agenda.failed
+            ? "Couldn't reach Google Calendar."
+            : "No meetings today."}
+        </p>
+      )}
       <ul className="divide-border divide-y">
-        {events.map((event) => (
+        {agenda.events.map((event) => (
           <li key={event.id} className="flex items-baseline gap-3 py-2">
             <span className="text-muted-foreground w-16 shrink-0 text-xs tabular-nums">
               {formatEventTime(event)}
