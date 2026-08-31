@@ -13,11 +13,12 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
 import { signIn, signUp } from "@/lib/auth-client";
 
 type Mode = "sign-in" | "sign-up";
 
-export function AuthForm() {
+export function AuthForm({ googleEnabled }: { googleEnabled: boolean }) {
   const router = useRouter();
   const [mode, setMode] = useState<Mode>("sign-in");
   const [pending, setPending] = useState(false);
@@ -97,6 +98,36 @@ export function AuthForm() {
             {mode === "sign-in" ? "Sign in" : "Create account"}
           </Button>
         </form>
+
+        {googleEnabled ? (
+          <>
+            <div className="my-4 flex items-center gap-3">
+              <Separator className="flex-1" />
+              <span className="text-muted-foreground text-xs">or</span>
+              <Separator className="flex-1" />
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled={pending}
+              onClick={async () => {
+                setPending(true);
+                const { error } = await signIn.social({
+                  provider: "google",
+                  callbackURL: "/my-day",
+                });
+                if (error) {
+                  setPending(false);
+                  toast.error(error.message ?? "Couldn't reach Google.");
+                }
+              }}
+            >
+              Continue with Google
+            </Button>
+          </>
+        ) : null}
 
         <button
           type="button"
