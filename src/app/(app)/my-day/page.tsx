@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { MyDayView } from "@/components/my-day-view";
+import { getCalendarEvents } from "@/lib/calendar";
 import { formatDay, today } from "@/lib/dates";
 import { getMyDayTasks, getRoutineOccurrences } from "@/lib/data";
 import { getSession } from "@/lib/session";
@@ -12,9 +13,10 @@ export default async function MyDayPage() {
   }
 
   const date = today();
-  const [tasks, routines] = await Promise.all([
+  const [tasks, routines, events] = await Promise.all([
     getMyDayTasks(session.user.id, date),
     getRoutineOccurrences(session.user.id, date),
+    getCalendarEvents(session.user.id, date),
   ]);
 
   return (
@@ -24,7 +26,12 @@ export default async function MyDayPage() {
         <p className="text-muted-foreground">{formatDay(date)}</p>
       </header>
 
-      <MyDayView date={date} initialTasks={tasks} initialRoutines={routines} />
+      <MyDayView
+        date={date}
+        initialTasks={tasks}
+        initialRoutines={routines}
+        events={events}
+      />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import {
   Menu,
   Plus,
   Repeat,
+  Settings,
   Star,
   Sun,
 } from "lucide-react";
@@ -33,6 +34,7 @@ const views = [
   { href: "/planned", label: "Planned", icon: CalendarClock },
   { href: "/tasks", label: "Tasks", icon: ListTodo },
   { href: "/routines", label: "Routines", icon: Repeat },
+  { href: "/settings", label: "Settings", icon: Settings },
 ];
 
 export function AppShell({

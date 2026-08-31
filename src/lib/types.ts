@@ -44,6 +44,24 @@ export type RoutineOccurrence = RoutineItem & {
   completed: boolean;
 };
 
+export type CalendarEvent = {
+  id: string;
+  title: string;
+  /** ISO timestamp, or null for all-day events. */
+  start: string | null;
+  end: string | null;
+  allDay: boolean;
+  location: string | null;
+  url: string | null;
+};
+
+export type CalendarStatus = {
+  /** Whether Google OAuth credentials are set on the server. */
+  configured: boolean;
+  connected: boolean;
+  hasCalendarAccess: boolean;
+};
+
 export const priorities: { value: Priority; label: string }[] = [
   { value: "none", label: "No priority" },
   { value: "low", label: "Low" },

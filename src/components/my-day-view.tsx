@@ -1,6 +1,6 @@
 "use client";
 
-import { Repeat } from "lucide-react";
+import { CalendarDays, Repeat } from "lucide-react";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
@@ -8,17 +8,19 @@ import { PriorityDot, TaskMeta } from "@/components/task-view";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatMinutes } from "@/lib/dates";
-import type { RoutineOccurrence, TaskItem } from "@/lib/types";
+import type { CalendarEvent, RoutineOccurrence, TaskItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function MyDayView({
   date,
   initialTasks,
   initialRoutines,
+  events,
 }: {
   date: string;
   initialTasks: TaskItem[];
   initialRoutines: RoutineOccurrence[];
+  events: CalendarEvent[];
 }) {
   const [tasks, setTasks] = useState(initialTasks);
   const [routines, setRoutines] = useState(initialRoutines);
@@ -87,7 +89,7 @@ export function MyDayView({
     });
   }
 
-  if (tasks.length === 0 && routines.length === 0) {
+  if (tasks.length === 0 && routines.length === 0 && events.length === 0) {
     return (
       <div className="border-border space-y-3 rounded-lg border border-dashed px-4 py-10 text-center">
         <p className="text-muted-foreground">
@@ -102,11 +104,15 @@ export function MyDayView({
 
   return (
     <div className="space-y-6">
-      <p className="text-muted-foreground text-sm">
-        {openCount === 0
-          ? "Everything on today's plan is done."
-          : `${openCount} left${remaining ? ` · about ${formatMinutes(remaining)}` : ""}`}
-      </p>
+      {events.length > 0 && <Agenda events={events} />}
+
+      {(tasks.length > 0 || routines.length > 0) && (
+        <p className="text-muted-foreground text-sm">
+          {openCount === 0
+            ? "Everything on today's plan is done."
+            : `${openCount} left${remaining ? ` · about ${formatMinutes(remaining)}` : ""}`}
+        </p>
+      )}
 
       <ul className="divide-border divide-y">
         {routines.map((item) => (
@@ -164,6 +170,43 @@ export function MyDayView({
       </ul>
     </div>
   );
+}
+
+function Agenda({ events }: { events: CalendarEvent[] }) {
+  return (
+    <section className="space-y-2">
+      <h2 className="text-muted-foreground flex items-center gap-1.5 text-xs tracking-wide uppercase">
+        <CalendarDays className="size-3.5" />
+        Schedule
+      </h2>
+      <ul className="divide-border divide-y">
+        {events.map((event) => (
+          <li key={event.id} className="flex items-baseline gap-3 py-2">
+            <span className="text-muted-foreground w-16 shrink-0 text-xs tabular-nums">
+              {formatEventTime(event)}
+            </span>
+            <div className="min-w-0 flex-1">
+              <span className="block truncate">{event.title}</span>
+              {event.location && (
+                <span className="text-muted-foreground block truncate text-xs">
+                  {event.location}
+                </span>
+              )}
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+function formatEventTime(event: CalendarEvent): string {
+  if (event.allDay || !event.start) return "All day";
+
+  return new Date(event.start).toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 function sumEstimate(

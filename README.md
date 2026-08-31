@@ -1,11 +1,12 @@
 # Simon
 
 A personal AI assistant for tasks and email. This stage covers auth, lists and tasks, routines,
-and a My Day view. Google Calendar comes next.
+a My Day view, and read-only Google Calendar.
 
 ## Views
 
-- **My Day** — today's routine occurrences and tasks (flagged for today or due), with remaining time.
+- **My Day** — today's Google Calendar events, routine occurrences, and tasks (flagged for today or due), with remaining time.
+- **Settings** — connect or disconnect Google Calendar.
 - **Tasks / lists** — inline add, task detail panel with priority, estimate, due date, steps, notes.
 - **Important** — medium and high priority tasks. **Planned** — everything with a due date.
 - **Routines** — daily / every N days / weekly by weekday / monthly by date, completed per date.
@@ -26,6 +27,13 @@ npm run dev
 ```
 
 The app runs at http://localhost:3000.
+
+## Google Calendar
+
+Optional. Create an OAuth client (Web application) in Google Cloud, enable the Calendar API, and add
+`<BETTER_AUTH_URL>/api/auth/callback/google` as a redirect URI. Set `GOOGLE_CLIENT_ID` and
+`GOOGLE_CLIENT_SECRET`, then connect the account from Settings. Simon requests
+`calendar.readonly` and reads the primary calendar for the current day only; nothing is cached.
 
 ## Scripts
 
