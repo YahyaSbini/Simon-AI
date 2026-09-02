@@ -141,6 +141,31 @@ export function TaskDetail({
     }
   }
 
+  async function renameStep(item: StepItem, title: string) {
+    if (!task) return;
+    const trimmed = title.trim();
+
+    if (!trimmed || trimmed === item.title) return;
+
+    onStepsChange(
+      task.id,
+      task.steps.map((entry) =>
+        entry.id === item.id ? { ...entry, title: trimmed } : entry,
+      ),
+    );
+
+    const response = await fetch(`/api/steps/${item.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title: trimmed }),
+    });
+
+    if (!response.ok) {
+      toast.error("Couldn't rename that step.");
+      onStepsChange(task.id, task.steps);
+    }
+  }
+
   async function deleteStep(item: StepItem) {
     if (!task) return;
 
@@ -303,15 +328,10 @@ export function TaskDetail({
                       onCheckedChange={() => toggleStep(item)}
                       aria-label={`Mark step "${item.title}" complete`}
                     />
-                    <span
-                      className={cn(
-                        "flex-1 text-sm",
-                        item.completed &&
-                          "text-muted-foreground line-through",
-                      )}
-                    >
-                      {item.title}
-                    </span>
+                    <StepTitle
+                      step={item}
+                      onRename={(title) => renameStep(item, title)}
+                    />
                     <Button
                       variant="ghost"
                       size="icon-sm"
@@ -367,5 +387,59 @@ export function TaskDetail({
         </div>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function StepTitle({
+  step,
+  onRename,
+}: {
+  step: StepItem;
+  onRename: (title: string) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(step.title);
+
+  function commit() {
+    setEditing(false);
+    onRename(value);
+  }
+
+  if (editing) {
+    return (
+      <Input
+        autoFocus
+        value={value}
+        onChange={(event) => setValue(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") commit();
+          if (event.key === "Escape") {
+            setValue(step.title);
+            setEditing(false);
+          }
+        }}
+        aria-label="Step title"
+        maxLength={200}
+        className="h-7 flex-1 px-1 text-sm"
+      />
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        setValue(step.title);
+        setEditing(true);
+      }}
+      className={cn(
+        "hover:bg-muted/60 flex-1 rounded px-1 py-0.5 text-left text-sm transition-colors",
+        step.completed && "text-muted-foreground line-through",
+      )}
+      aria-label={`Edit step "${step.title}"`}
+    >
+      {step.title}
+    </button>
   );
 }

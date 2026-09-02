@@ -148,7 +148,7 @@ export async function getRoutineOccurrences(
   }));
 }
 
-/** Tasks that belong on My Day: flagged for today, or due on/before today. */
+/** Open tasks that belong on My Day: flagged for today, or due on/before today. */
 export async function getMyDayTasks(
   userId: string,
   date: string,
@@ -161,7 +161,8 @@ export async function getMyDayTasks(
 
   const relevant = rows.filter(
     (row) =>
-      row.myDayDate === date || (row.dueAt && toDateKey(row.dueAt) <= date),
+      row.completedAt === null &&
+      (row.myDayDate === date || (row.dueAt && toDateKey(row.dueAt) <= date)),
   );
 
   const steps = relevant.length
