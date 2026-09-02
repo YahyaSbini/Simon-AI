@@ -42,6 +42,7 @@ export default async function ListPage({
       <TaskView
         initialTasks={tasks}
         lists={lists}
+        view="list"
         listId={listId}
         emptyMessage="This list is empty. Add the first task above."
       />

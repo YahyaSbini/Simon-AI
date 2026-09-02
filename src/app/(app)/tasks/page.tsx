@@ -25,6 +25,7 @@ export default async function TasksPage() {
       <TaskView
         initialTasks={tasks}
         lists={lists}
+        view="all"
         emptyMessage="Nothing here yet. Add your first task above."
       />
     </div>

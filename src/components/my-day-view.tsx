@@ -2,15 +2,20 @@
 
 import { CalendarDays, Repeat } from "lucide-react";
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { TaskDetail } from "@/components/task-detail";
+import { useTasks, useTaskStore } from "@/components/task-store";
 import { PriorityDot, TaskMeta } from "@/components/task-view";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { formatMinutes } from "@/lib/dates";
+import { taskMatches } from "@/lib/task-views";
 import type {
   CalendarAgenda,
   CalendarEvent,
+  ListItem,
   RoutineOccurrence,
   TaskItem,
 } from "@/lib/types";
@@ -20,48 +25,57 @@ export function MyDayView({
   date,
   initialTasks,
   initialRoutines,
+  lists,
   agenda,
 }: {
   date: string;
   initialTasks: TaskItem[];
   initialRoutines: RoutineOccurrence[];
+  lists: ListItem[];
   agenda: CalendarAgenda;
 }) {
-  const [tasks, setTasks] = useState(initialTasks);
+  const store = useTaskStore();
+  const matches = useCallback(
+    (task: TaskItem) => taskMatches("my-day", task, { date }),
+    [date],
+  );
+  const tasks = useTasks(initialTasks, matches);
   const [routines, setRoutines] = useState(initialRoutines);
-  const [, startTransition] = useTransition();
+  const [title, setTitle] = useState("");
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const openTask = store.tasks[openTaskId ?? ""] ?? null;
 
   const remaining =
-    tasks.filter((item) => !item.completed).reduce(sumEstimate, 0) +
+    tasks.reduce(sumEstimate, 0) +
     routines.filter((item) => !item.completed).reduce(sumEstimate, 0);
 
   const openCount =
-    tasks.filter((item) => !item.completed).length +
-    routines.filter((item) => !item.completed).length;
+    tasks.length + routines.filter((item) => !item.completed).length;
 
-  function toggleTask(item: TaskItem) {
-    const completed = !item.completed;
+  function addTask(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = title.trim();
 
-    setTasks((current) =>
-      current.map((entry) =>
-        entry.id === item.id ? { ...entry, completed } : entry,
-      ),
-    );
+    if (!trimmed) return;
 
     startTransition(async () => {
-      const response = await fetch(`/api/tasks/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ completed }),
+      const created = await store.createTask({
+        title: trimmed,
+        myDayDate: date,
       });
-
-      if (!response.ok) {
-        toast.error("Couldn't update that task.");
-        setTasks((current) =>
-          current.map((entry) => (entry.id === item.id ? item : entry)),
-        );
-      }
+      if (created) setTitle("");
     });
+  }
+
+  function completeTask(item: TaskItem) {
+    store.patchTask(item, { completed: true }, { completed: true });
+  }
+
+  function deleteTask(item: TaskItem) {
+    setOpenTaskId(null);
+    store.deleteTask(item);
   }
 
   function toggleRoutine(item: RoutineOccurrence) {
@@ -94,22 +108,35 @@ export function MyDayView({
     });
   }
 
-  if (tasks.length === 0 && routines.length === 0 && !agenda.connected) {
-    return (
-      <div className="border-border space-y-3 rounded-lg border border-dashed px-4 py-10 text-center">
-        <p className="text-muted-foreground">Nothing planned for today yet.</p>
-        <Button variant="outline" render={<Link href="/tasks" />}>
-          Pick from Tasks
-        </Button>
-      </div>
-    );
-  }
+  const empty = tasks.length === 0 && routines.length === 0;
 
   return (
     <div className="space-y-6">
+      <form onSubmit={addTask} className="flex gap-2">
+        <Input
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="Add a task for today"
+          aria-label="Task title"
+          maxLength={200}
+        />
+        <Button type="submit" disabled={pending || title.trim().length === 0}>
+          Add
+        </Button>
+      </form>
+
       {agenda.connected && <Agenda agenda={agenda} />}
 
-      {(tasks.length > 0 || routines.length > 0) && (
+      {empty ? (
+        <div className="border-border space-y-3 rounded-lg border border-dashed px-4 py-10 text-center">
+          <p className="text-muted-foreground">
+            Nothing planned for today yet.
+          </p>
+          <Button variant="outline" render={<Link href="/tasks" />}>
+            Pick from Tasks
+          </Button>
+        </div>
+      ) : (
         <p className="text-muted-foreground text-sm">
           {openCount === 0
             ? "Everything on today's plan is done."
@@ -159,24 +186,30 @@ export function MyDayView({
           >
             <Checkbox
               checked={item.completed}
-              onCheckedChange={() => toggleTask(item)}
+              onCheckedChange={() => completeTask(item)}
               aria-label={`Mark "${item.title}" complete`}
             />
-            <div className="min-w-0 flex-1">
-              <span
-                className={cn(
-                  "block truncate",
-                  item.completed && "text-muted-foreground line-through",
-                )}
-              >
-                {item.title}
-              </span>
+            <button
+              type="button"
+              onClick={() => setOpenTaskId(item.id)}
+              className="min-w-0 flex-1 text-left"
+            >
+              <span className="block truncate">{item.title}</span>
               <TaskMeta task={item} />
-            </div>
+            </button>
             <PriorityDot priority={item.priority} />
           </li>
         ))}
       </ul>
+
+      <TaskDetail
+        task={openTask}
+        lists={lists}
+        onClose={() => setOpenTaskId(null)}
+        onChange={store.patchTask}
+        onDelete={deleteTask}
+        onStepsChange={store.setSteps}
+      />
     </div>
   );
 }

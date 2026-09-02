@@ -25,6 +25,7 @@ export default async function ImportantPage() {
       <TaskView
         initialTasks={tasks}
         lists={lists}
+        view="important"
         emptyMessage="Nothing urgent. Raise a task's priority and it shows up here."
       />
     </div>

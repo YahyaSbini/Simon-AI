@@ -16,6 +16,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { BrandMark } from "@/components/brand-mark";
 import { SignOutButton } from "@/components/sign-out-button";
+import { TaskStoreProvider } from "@/components/task-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -77,7 +78,7 @@ export function AppShell({
         </header>
 
         <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 md:px-8 md:py-10">
-          {children}
+          <TaskStoreProvider>{children}</TaskStoreProvider>
         </main>
       </div>
     </div>
