@@ -415,6 +415,7 @@ function StepTitle({
         onKeyDown={(event) => {
           if (event.key === "Enter") commit();
           if (event.key === "Escape") {
+            event.stopPropagation();
             setValue(step.title);
             setEditing(false);
           }
