@@ -25,6 +25,7 @@ export default async function PlannedPage() {
       <TaskView
         initialTasks={tasks}
         lists={lists}
+        view="planned"
         emptyMessage="No due dates set yet."
       />
     </div>

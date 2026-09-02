@@ -1,13 +1,14 @@
 "use client";
 
 import { CalendarClock, Clock, Sun, Trash2 } from "lucide-react";
-import { useState, useTransition } from "react";
-import { toast } from "sonner";
+import { useCallback, useState, useTransition } from "react";
 import { TaskDetail } from "@/components/task-detail";
+import { useTasks, useTaskStore } from "@/components/task-store";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { formatDue, formatMinutes, today } from "@/lib/dates";
+import { taskMatches, type TaskViewKey } from "@/lib/task-views";
 import type { ListItem, TaskItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -15,95 +16,44 @@ export function TaskView({
   initialTasks,
   lists,
   listId = null,
+  view,
   emptyMessage,
 }: {
   initialTasks: TaskItem[];
   lists: ListItem[];
   listId?: string | null;
+  view: TaskViewKey;
   emptyMessage: string;
 }) {
-  const [tasks, setTasks] = useState(initialTasks);
+  const store = useTaskStore();
+  const matches = useCallback(
+    (task: TaskItem) => taskMatches(view, task, { listId }),
+    [view, listId],
+  );
+  const tasks = useTasks(initialTasks, matches);
   const [title, setTitle] = useState("");
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  const openTask = tasks.find((item) => item.id === openTaskId) ?? null;
+  const openTask = store.tasks[openTaskId ?? ""] ?? null;
   const active = tasks.filter((item) => !item.completed);
   const done = tasks.filter((item) => item.completed);
 
-  async function addTask(event: React.FormEvent<HTMLFormElement>) {
+  function addTask(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmed = title.trim();
 
     if (!trimmed) return;
 
-    const response = await fetch("/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: trimmed, listId }),
-    });
-
-    if (!response.ok) {
-      toast.error("Couldn't save that task. Try again.");
-      return;
-    }
-
-    const { task } = await response.json();
-    setTasks((current) => [
-      {
-        id: task.id,
-        title: task.title,
-        notes: null,
-        listId: task.listId,
-        priority: task.priority,
-        estimatedMinutes: null,
-        dueAt: null,
-        myDayDate: null,
-        completed: false,
-        steps: [],
-      },
-      ...current,
-    ]);
-    setTitle("");
-  }
-
-  function patchTask(item: TaskItem, changes: Partial<TaskItem>, body: object) {
-    setTasks((current) =>
-      current.map((entry) =>
-        entry.id === item.id ? { ...entry, ...changes } : entry,
-      ),
-    );
-
     startTransition(async () => {
-      const response = await fetch(`/api/tasks/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        toast.error("Couldn't update that task.");
-        setTasks((current) =>
-          current.map((entry) => (entry.id === item.id ? item : entry)),
-        );
-      }
+      const created = await store.createTask({ title: trimmed, listId });
+      if (created) setTitle("");
     });
   }
 
   function deleteTask(item: TaskItem) {
-    setTasks((current) => current.filter((entry) => entry.id !== item.id));
     setOpenTaskId(null);
-
-    startTransition(async () => {
-      const response = await fetch(`/api/tasks/${item.id}`, {
-        method: "DELETE",
-      });
-
-      if (!response.ok) {
-        toast.error("Couldn't delete that task.");
-        setTasks((current) => [item, ...current]);
-      }
-    });
+    store.deleteTask(item);
   }
 
   return (
@@ -131,7 +81,7 @@ export function TaskView({
             tasks={active}
             onOpen={setOpenTaskId}
             onToggle={(item) =>
-              patchTask(item, { completed: true }, { completed: true })
+              store.patchTask(item, { completed: true }, { completed: true })
             }
             onDelete={deleteTask}
           />
@@ -145,7 +95,7 @@ export function TaskView({
                 tasks={done}
                 onOpen={setOpenTaskId}
                 onToggle={(item) =>
-                  patchTask(item, { completed: false }, { completed: false })
+                  store.patchTask(item, { completed: false }, { completed: false })
                 }
                 onDelete={deleteTask}
               />
@@ -158,15 +108,9 @@ export function TaskView({
         task={openTask}
         lists={lists}
         onClose={() => setOpenTaskId(null)}
-        onChange={patchTask}
+        onChange={store.patchTask}
         onDelete={deleteTask}
-        onStepsChange={(taskId, steps) =>
-          setTasks((current) =>
-            current.map((entry) =>
-              entry.id === taskId ? { ...entry, steps } : entry,
-            ),
-          )
-        }
+        onStepsChange={store.setSteps}
       />
     </div>
   );

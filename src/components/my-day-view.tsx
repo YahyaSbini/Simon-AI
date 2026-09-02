@@ -2,61 +2,80 @@
 
 import { CalendarDays, Repeat } from "lucide-react";
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { TaskDetail } from "@/components/task-detail";
+import { useTasks, useTaskStore } from "@/components/task-store";
 import { PriorityDot, TaskMeta } from "@/components/task-view";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { formatMinutes } from "@/lib/dates";
-import type { CalendarEvent, RoutineOccurrence, TaskItem } from "@/lib/types";
+import { taskMatches } from "@/lib/task-views";
+import type {
+  CalendarAgenda,
+  CalendarEvent,
+  ListItem,
+  RoutineOccurrence,
+  TaskItem,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function MyDayView({
   date,
   initialTasks,
   initialRoutines,
-  events,
+  lists,
+  agenda,
 }: {
   date: string;
   initialTasks: TaskItem[];
   initialRoutines: RoutineOccurrence[];
-  events: CalendarEvent[];
+  lists: ListItem[];
+  agenda: CalendarAgenda;
 }) {
-  const [tasks, setTasks] = useState(initialTasks);
+  const store = useTaskStore();
+  const matches = useCallback(
+    (task: TaskItem) => taskMatches("my-day", task, { date }),
+    [date],
+  );
+  const tasks = useTasks(initialTasks, matches);
   const [routines, setRoutines] = useState(initialRoutines);
-  const [, startTransition] = useTransition();
+  const [title, setTitle] = useState("");
+  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const openTask = store.tasks[openTaskId ?? ""] ?? null;
 
   const remaining =
-    tasks.filter((item) => !item.completed).reduce(sumEstimate, 0) +
+    tasks.reduce(sumEstimate, 0) +
     routines.filter((item) => !item.completed).reduce(sumEstimate, 0);
 
   const openCount =
-    tasks.filter((item) => !item.completed).length +
-    routines.filter((item) => !item.completed).length;
+    tasks.length + routines.filter((item) => !item.completed).length;
 
-  function toggleTask(item: TaskItem) {
-    const completed = !item.completed;
+  function addTask(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const trimmed = title.trim();
 
-    setTasks((current) =>
-      current.map((entry) =>
-        entry.id === item.id ? { ...entry, completed } : entry,
-      ),
-    );
+    if (!trimmed) return;
 
     startTransition(async () => {
-      const response = await fetch(`/api/tasks/${item.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ completed }),
+      const created = await store.createTask({
+        title: trimmed,
+        myDayDate: date,
       });
-
-      if (!response.ok) {
-        toast.error("Couldn't update that task.");
-        setTasks((current) =>
-          current.map((entry) => (entry.id === item.id ? item : entry)),
-        );
-      }
+      if (created) setTitle("");
     });
+  }
+
+  function completeTask(item: TaskItem) {
+    store.patchTask(item, { completed: true }, { completed: true });
+  }
+
+  function deleteTask(item: TaskItem) {
+    setOpenTaskId(null);
+    store.deleteTask(item);
   }
 
   function toggleRoutine(item: RoutineOccurrence) {
@@ -89,24 +108,35 @@ export function MyDayView({
     });
   }
 
-  if (tasks.length === 0 && routines.length === 0 && events.length === 0) {
-    return (
-      <div className="border-border space-y-3 rounded-lg border border-dashed px-4 py-10 text-center">
-        <p className="text-muted-foreground">
-          Nothing planned for today yet.
-        </p>
-        <Button variant="outline" render={<Link href="/tasks" />}>
-          Pick from Tasks
-        </Button>
-      </div>
-    );
-  }
+  const empty = tasks.length === 0 && routines.length === 0;
 
   return (
     <div className="space-y-6">
-      {events.length > 0 && <Agenda events={events} />}
+      <form onSubmit={addTask} className="flex gap-2">
+        <Input
+          value={title}
+          onChange={(event) => setTitle(event.target.value)}
+          placeholder="Add a task for today"
+          aria-label="Task title"
+          maxLength={200}
+        />
+        <Button type="submit" disabled={pending || title.trim().length === 0}>
+          Add
+        </Button>
+      </form>
 
-      {(tasks.length > 0 || routines.length > 0) && (
+      {agenda.connected && <Agenda agenda={agenda} />}
+
+      {empty ? (
+        <div className="border-border space-y-3 rounded-lg border border-dashed px-4 py-10 text-center">
+          <p className="text-muted-foreground">
+            Nothing planned for today yet.
+          </p>
+          <Button variant="outline" render={<Link href="/tasks" />}>
+            Pick from Tasks
+          </Button>
+        </div>
+      ) : (
         <p className="text-muted-foreground text-sm">
           {openCount === 0
             ? "Everything on today's plan is done."
@@ -116,7 +146,10 @@ export function MyDayView({
 
       <ul className="divide-border divide-y">
         {routines.map((item) => (
-          <li key={`routine-${item.id}`} className="flex items-center gap-3 py-2.5">
+          <li
+            key={`routine-${item.id}`}
+            className="flex items-center gap-3 py-2.5"
+          >
             <Checkbox
               checked={item.completed}
               onCheckedChange={() => toggleRoutine(item)}
@@ -147,40 +180,56 @@ export function MyDayView({
         ))}
 
         {tasks.map((item) => (
-          <li key={`task-${item.id}`} className="flex items-center gap-3 py-2.5">
+          <li
+            key={`task-${item.id}`}
+            className="flex items-center gap-3 py-2.5"
+          >
             <Checkbox
               checked={item.completed}
-              onCheckedChange={() => toggleTask(item)}
+              onCheckedChange={() => completeTask(item)}
               aria-label={`Mark "${item.title}" complete`}
             />
-            <div className="min-w-0 flex-1">
-              <span
-                className={cn(
-                  "block truncate",
-                  item.completed && "text-muted-foreground line-through",
-                )}
-              >
-                {item.title}
-              </span>
+            <button
+              type="button"
+              onClick={() => setOpenTaskId(item.id)}
+              className="min-w-0 flex-1 text-left"
+            >
+              <span className="block truncate">{item.title}</span>
               <TaskMeta task={item} />
-            </div>
+            </button>
             <PriorityDot priority={item.priority} />
           </li>
         ))}
       </ul>
+
+      <TaskDetail
+        task={openTask}
+        lists={lists}
+        onClose={() => setOpenTaskId(null)}
+        onChange={store.patchTask}
+        onDelete={deleteTask}
+        onStepsChange={store.setSteps}
+      />
     </div>
   );
 }
 
-function Agenda({ events }: { events: CalendarEvent[] }) {
+function Agenda({ agenda }: { agenda: CalendarAgenda }) {
   return (
     <section className="space-y-2">
       <h2 className="text-muted-foreground flex items-center gap-1.5 text-xs tracking-wide uppercase">
         <CalendarDays className="size-3.5" />
         Schedule
       </h2>
+      {agenda.events.length === 0 && (
+        <p className="text-muted-foreground text-sm">
+          {agenda.failed
+            ? "Couldn't reach Google Calendar."
+            : "No meetings today."}
+        </p>
+      )}
       <ul className="divide-border divide-y">
-        {events.map((event) => (
+        {agenda.events.map((event) => (
           <li key={event.id} className="flex items-baseline gap-3 py-2">
             <span className="text-muted-foreground w-16 shrink-0 text-xs tabular-nums">
               {formatEventTime(event)}
