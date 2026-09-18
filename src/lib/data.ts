@@ -1,10 +1,12 @@
-import { and, asc, desc, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import type { Routine, Task, TaskStep } from "@/db/schema";
+import type { Routine, RoutineStep, Task, TaskStep } from "@/db/schema";
 import {
   list,
   routine,
   routineCompletion,
+  routineStep,
+  routineStepCompletion,
   task,
   taskStep,
 } from "@/db/schema";
@@ -12,7 +14,7 @@ import { toDateKey } from "@/lib/dates";
 import { describeRecurrence, occursOn } from "@/lib/routines";
 import type { ListItem, RoutineItem, RoutineOccurrence, TaskItem } from "@/lib/types";
 
-export type TaskView = "all" | "important" | "planned" | "list";
+export type TaskView = "all" | "important" | "planned" | "list" | "completed";
 
 export async function getLists(userId: string): Promise<ListItem[]> {
   const rows = await db
@@ -35,17 +37,24 @@ export async function getTasks(
     scope.push(eq(task.listId, options.listId));
   }
   if (view === "important") {
-    scope.push(inArray(task.priority, ["high", "medium"]));
+    scope.push(eq(task.important, true));
   }
   if (view === "planned") {
     scope.push(isNotNull(task.dueAt));
   }
+  scope.push(
+    view === "completed" ? isNotNull(task.completedAt) : isNull(task.completedAt),
+  );
 
   const rows = await db
     .select()
     .from(task)
     .where(and(...scope))
-    .orderBy(asc(task.completedAt), asc(task.position), desc(task.createdAt));
+    .orderBy(
+      ...(view === "completed"
+        ? [desc(task.completedAt)]
+        : [asc(task.position), desc(task.createdAt)]),
+    );
 
   const steps = rows.length
     ? await db
@@ -70,6 +79,7 @@ export function serializeTask(row: Task, steps: TaskStep[] = []): TaskItem {
     notes: row.notes,
     listId: row.listId,
     priority: row.priority,
+    important: row.important,
     estimatedMinutes: row.estimatedMinutes,
     dueAt: row.dueAt?.toISOString() ?? null,
     myDayDate: row.myDayDate,
@@ -84,12 +94,17 @@ export function serializeTask(row: Task, steps: TaskStep[] = []): TaskItem {
   };
 }
 
-export function serializeRoutine(row: Routine): RoutineItem {
+export function serializeRoutine(
+  row: Routine,
+  steps: RoutineStep[] = [],
+  completedStepIds: Set<string> = new Set(),
+): RoutineItem {
   return {
     id: row.id,
     title: row.title,
     notes: row.notes,
     priority: row.priority,
+    important: row.important,
     estimatedMinutes: row.estimatedMinutes,
     frequency: row.frequency,
     interval: row.interval,
@@ -97,19 +112,63 @@ export function serializeRoutine(row: Routine): RoutineItem {
     byMonthDay: row.byMonthDay,
     timeOfDay: row.timeOfDay,
     startDate: row.startDate,
+    endDate: row.endDate,
     active: row.active,
     recurrence: describeRecurrence(row),
+    steps: steps
+      .filter((step) => step.routineId === row.id)
+      .map((step) => ({
+        id: step.id,
+        title: step.title,
+        completed: completedStepIds.has(step.id),
+      })),
   };
 }
 
-export async function getRoutines(userId: string): Promise<RoutineItem[]> {
+async function getRoutineSteps(routineIds: string[]): Promise<RoutineStep[]> {
+  if (!routineIds.length) return [];
+  return db
+    .select()
+    .from(routineStep)
+    .where(inArray(routineStep.routineId, routineIds))
+    .orderBy(asc(routineStep.position), asc(routineStep.createdAt));
+}
+
+/** All routines with today's step state, where `date` is today in the user's zone. */
+export async function getRoutines(
+  userId: string,
+  date: string,
+): Promise<RoutineItem[]> {
   const rows = await db
     .select()
     .from(routine)
     .where(eq(routine.userId, userId))
-    .orderBy(asc(routine.timeOfDay), asc(routine.createdAt));
+    .orderBy(asc(routine.position), asc(routine.timeOfDay), asc(routine.createdAt));
 
-  return rows.map(serializeRoutine);
+  const steps = await getRoutineSteps(rows.map((row) => row.id));
+  const done = await getCompletedStepIds(steps, date);
+
+  return rows.map((row) => serializeRoutine(row, steps, done));
+}
+
+async function getCompletedStepIds(
+  steps: RoutineStep[],
+  date: string,
+): Promise<Set<string>> {
+  if (!steps.length) return new Set();
+  const rows = await db
+    .select({ stepId: routineStepCompletion.stepId })
+    .from(routineStepCompletion)
+    .where(
+      and(
+        inArray(
+          routineStepCompletion.stepId,
+          steps.map((step) => step.id),
+        ),
+        eq(routineStepCompletion.date, date),
+      ),
+    );
+  return new Set(rows.map((row) => row.stepId));
 }
 
 /** Routine occurrences for a single day, with their completion state. */
@@ -121,11 +180,14 @@ export async function getRoutineOccurrences(
     .select()
     .from(routine)
     .where(eq(routine.userId, userId))
-    .orderBy(asc(routine.timeOfDay), asc(routine.createdAt));
+    .orderBy(asc(routine.position), asc(routine.timeOfDay), asc(routine.createdAt));
 
   const due = rows.filter((row) => occursOn(row, date));
 
   if (!due.length) return [];
+
+  const steps = await getRoutineSteps(due.map((row) => row.id));
+  const doneSteps = await getCompletedStepIds(steps, date);
 
   const completions = await db
     .select({ routineId: routineCompletion.routineId })
@@ -143,7 +205,7 @@ export async function getRoutineOccurrences(
   const completed = new Set(completions.map((row) => row.routineId));
 
   return due.map((row) => ({
-    ...serializeRoutine(row),
+    ...serializeRoutine(row, steps, doneSteps),
     completed: completed.has(row.id),
   }));
 }

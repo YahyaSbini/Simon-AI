@@ -17,6 +17,7 @@ export type TaskItem = {
   notes: string | null;
   listId: string | null;
   priority: Priority;
+  important: boolean;
   estimatedMinutes: number | null;
   dueAt: string | null;
   myDayDate: string | null;
@@ -29,6 +30,7 @@ export type RoutineItem = {
   title: string;
   notes: string | null;
   priority: Priority;
+  important: boolean;
   estimatedMinutes: number | null;
   frequency: Frequency;
   interval: number;
@@ -36,8 +38,10 @@ export type RoutineItem = {
   byMonthDay: number | null;
   timeOfDay: string | null;
   startDate: string;
+  endDate: string | null;
   active: boolean;
   recurrence: string;
+  steps: StepItem[];
 };
 
 export type RoutineOccurrence = RoutineItem & {

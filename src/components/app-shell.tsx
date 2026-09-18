@@ -2,6 +2,7 @@
 
 import {
   CalendarClock,
+  CheckCheck,
   ListTodo,
   Menu,
   Plus,
@@ -35,6 +36,7 @@ const views = [
   { href: "/planned", label: "Planned", icon: CalendarClock },
   { href: "/tasks", label: "Tasks", icon: ListTodo },
   { href: "/routines", label: "Routines", icon: Repeat },
+  { href: "/completed", label: "Ticked Tasks", icon: CheckCheck },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

@@ -1,8 +1,9 @@
 "use client";
 
 import { Sun, Trash2, X } from "lucide-react";
+import { StepEditor } from "@/components/step-editor";
+import { StarButton } from "@/components/task-bits";
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -39,13 +40,11 @@ export function TaskDetail({
 }) {
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
-  const [step, setStep] = useState("");
   const [due, setDue] = useState("");
 
   useEffect(() => {
     setTitle(task?.title ?? "");
     setNotes(task?.notes ?? "");
-    setStep("");
   }, [task?.id, task?.title, task?.notes]);
 
   useEffect(() => {
@@ -92,96 +91,6 @@ export function TaskDetail({
     onChange(task, { notes: value || null }, { notes: value || null });
   }
 
-  async function addStep(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!task) return;
-    const trimmed = step.trim();
-
-    if (!trimmed) return;
-
-    const response = await fetch(`/api/tasks/${task.id}/steps`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: trimmed }),
-    });
-
-    if (!response.ok) {
-      toast.error("Couldn't add that step.");
-      return;
-    }
-
-    const { step: created } = await response.json();
-    onStepsChange(task.id, [
-      ...task.steps,
-      { id: created.id, title: created.title, completed: false },
-    ]);
-    setStep("");
-  }
-
-  async function toggleStep(item: StepItem) {
-    if (!task) return;
-    const completed = !item.completed;
-
-    onStepsChange(
-      task.id,
-      task.steps.map((entry) =>
-        entry.id === item.id ? { ...entry, completed } : entry,
-      ),
-    );
-
-    const response = await fetch(`/api/steps/${item.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ completed }),
-    });
-
-    if (!response.ok) {
-      toast.error("Couldn't update that step.");
-      onStepsChange(task.id, task.steps);
-    }
-  }
-
-  async function renameStep(item: StepItem, title: string) {
-    if (!task) return;
-    const trimmed = title.trim();
-
-    if (!trimmed || trimmed === item.title) return;
-
-    onStepsChange(
-      task.id,
-      task.steps.map((entry) =>
-        entry.id === item.id ? { ...entry, title: trimmed } : entry,
-      ),
-    );
-
-    const response = await fetch(`/api/steps/${item.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: trimmed }),
-    });
-
-    if (!response.ok) {
-      toast.error("Couldn't rename that step.");
-      onStepsChange(task.id, task.steps);
-    }
-  }
-
-  async function deleteStep(item: StepItem) {
-    if (!task) return;
-
-    onStepsChange(
-      task.id,
-      task.steps.filter((entry) => entry.id !== item.id),
-    );
-
-    const response = await fetch(`/api/steps/${item.id}`, { method: "DELETE" });
-
-    if (!response.ok) {
-      toast.error("Couldn't remove that step.");
-      onStepsChange(task.id, task.steps);
-    }
-  }
-
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
       <SheetContent
@@ -213,6 +122,17 @@ export function TaskDetail({
               "font-heading h-auto border-0 px-1 py-1 text-lg shadow-none focus-visible:ring-0",
               task.completed && "text-muted-foreground line-through",
             )}
+          />
+          <StarButton
+            active={task.important}
+            onToggle={() =>
+              onChange(
+                task,
+                { important: !task.important },
+                { important: !task.important },
+              )
+            }
+            className="mt-1.5"
           />
           <Button
             variant="ghost"
@@ -317,51 +237,13 @@ export function TaskDetail({
             </div>
           </div>
 
-          <section className="space-y-2">
-            <Label htmlFor="task-step">Steps</Label>
-            {task.steps.length > 0 && (
-              <ul className="space-y-1">
-                {task.steps.map((item) => (
-                  <li key={item.id} className="group flex items-center gap-2">
-                    <Checkbox
-                      checked={item.completed}
-                      onCheckedChange={() => toggleStep(item)}
-                      aria-label={`Mark step "${item.title}" complete`}
-                    />
-                    <StepTitle
-                      step={item}
-                      onRename={(title) => renameStep(item, title)}
-                    />
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Remove step "${item.title}"`}
-                      className="transition-opacity md:opacity-0 md:group-hover:opacity-100"
-                      onClick={() => deleteStep(item)}
-                    >
-                      <Trash2 />
-                    </Button>
-                  </li>
-                ))}
-              </ul>
-            )}
-            <form onSubmit={addStep} className="flex gap-2">
-              <Input
-                id="task-step"
-                value={step}
-                onChange={(event) => setStep(event.target.value)}
-                placeholder="Add a step"
-                maxLength={200}
-              />
-              <Button
-                type="submit"
-                variant="outline"
-                disabled={step.trim().length === 0}
-              >
-                Add
-              </Button>
-            </form>
-          </section>
+          <StepEditor
+            steps={task.steps}
+            onChange={(steps) => onStepsChange(task.id, steps)}
+            createUrl={`/api/tasks/${task.id}/steps`}
+            stepUrl={(id) => `/api/steps/${id}`}
+            inputId="task-step"
+          />
 
           <div className="space-y-1.5">
             <Label htmlFor="task-notes">Notes</Label>
@@ -387,60 +269,5 @@ export function TaskDetail({
         </div>
       </SheetContent>
     </Sheet>
-  );
-}
-
-function StepTitle({
-  step,
-  onRename,
-}: {
-  step: StepItem;
-  onRename: (title: string) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(step.title);
-
-  function commit() {
-    setEditing(false);
-    onRename(value);
-  }
-
-  if (editing) {
-    return (
-      <Input
-        autoFocus
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") commit();
-          if (event.key === "Escape") {
-            event.stopPropagation();
-            setValue(step.title);
-            setEditing(false);
-          }
-        }}
-        aria-label="Step title"
-        maxLength={200}
-        className="h-7 flex-1 px-1 text-sm"
-      />
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        setValue(step.title);
-        setEditing(true);
-      }}
-      className={cn(
-        "hover:bg-muted/60 flex-1 rounded px-1 py-0.5 text-left text-sm transition-colors",
-        step.completed && "text-muted-foreground line-through",
-      )}
-      aria-label={`Edit step "${step.title}"`}
-    >
-      {step.title}
-    </button>
   );
 }

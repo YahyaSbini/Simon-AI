@@ -17,7 +17,7 @@ export async function GET() {
     .select()
     .from(routine)
     .where(eq(routine.userId, userId))
-    .orderBy(asc(routine.timeOfDay), asc(routine.createdAt));
+    .orderBy(asc(routine.position), asc(routine.timeOfDay), asc(routine.createdAt));
 
   return NextResponse.json({ routines });
 }

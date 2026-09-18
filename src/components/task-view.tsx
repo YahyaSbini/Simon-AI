@@ -1,14 +1,21 @@
 "use client";
 
 import { CalendarClock, Clock, Sun, Trash2 } from "lucide-react";
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
+import { SortableList, SortableRow } from "@/components/sortable-list";
+import { OverdueDot, SearchField, StarButton } from "@/components/task-bits";
 import { TaskDetail } from "@/components/task-detail";
 import { useTasks, useTaskStore } from "@/components/task-store";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { formatDue, formatMinutes, today } from "@/lib/dates";
-import { taskMatches, type TaskViewKey } from "@/lib/task-views";
+import {
+  isOverdue,
+  searchMatches,
+  taskMatches,
+  type TaskViewKey,
+} from "@/lib/task-views";
 import type { ListItem, TaskItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -32,12 +39,17 @@ export function TaskView({
   );
   const tasks = useTasks(initialTasks, matches);
   const [title, setTitle] = useState("");
+  const [query, setQuery] = useState("");
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const openTask = store.tasks[openTaskId ?? ""] ?? null;
-  const active = tasks.filter((item) => !item.completed);
-  const done = tasks.filter((item) => item.completed);
+  const completedView = view === "completed";
+  const visible = useMemo(
+    () => tasks.filter((item) => searchMatches(item, query)),
+    [tasks, query],
+  );
+  const filtering = query.trim().length > 0;
 
   function addTask(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -58,50 +70,53 @@ export function TaskView({
 
   return (
     <div className="space-y-6">
-      <form onSubmit={addTask} className="flex gap-2">
-        <Input
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder="Add a task"
-          aria-label="Task title"
-          maxLength={200}
-        />
-        <Button type="submit" disabled={pending || title.trim().length === 0}>
-          Add
-        </Button>
-      </form>
+      {!completedView && (
+        <form onSubmit={addTask} className="flex gap-2">
+          <Input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Add a task"
+            aria-label="Task title"
+            maxLength={200}
+          />
+          <Button type="submit" disabled={pending || title.trim().length === 0}>
+            Add
+          </Button>
+        </form>
+      )}
+
+      {tasks.length > 0 && <SearchField value={query} onChange={setQuery} />}
 
       {tasks.length === 0 ? (
         <p className="text-muted-foreground border-border rounded-lg border border-dashed px-4 py-10 text-center">
           {emptyMessage}
         </p>
+      ) : visible.length === 0 ? (
+        <p className="text-muted-foreground px-4 py-10 text-center text-sm">
+          No tasks match “{query.trim()}”.
+        </p>
       ) : (
-        <div className="space-y-6">
-          <TaskRows
-            tasks={active}
-            onOpen={setOpenTaskId}
-            onToggle={(item) =>
-              store.patchTask(item, { completed: true }, { completed: true })
-            }
-            onDelete={deleteTask}
-          />
-
-          {done.length > 0 && (
-            <section className="space-y-2">
-              <h2 className="text-muted-foreground text-xs tracking-wide uppercase">
-                Completed · {done.length}
-              </h2>
-              <TaskRows
-                tasks={done}
-                onOpen={setOpenTaskId}
-                onToggle={(item) =>
-                  store.patchTask(item, { completed: false }, { completed: false })
-                }
-                onDelete={deleteTask}
-              />
-            </section>
-          )}
-        </div>
+        <TaskRows
+          tasks={visible}
+          sortable={!completedView && !filtering}
+          onReorder={store.reorderTasks}
+          onOpen={setOpenTaskId}
+          onToggle={(item) =>
+            store.patchTask(
+              item,
+              { completed: !item.completed },
+              { completed: !item.completed },
+            )
+          }
+          onStar={(item) =>
+            store.patchTask(
+              item,
+              { important: !item.important },
+              { important: !item.important },
+            )
+          }
+          onDelete={deleteTask}
+        />
       )}
 
       <TaskDetail
@@ -116,25 +131,44 @@ export function TaskView({
   );
 }
 
-function TaskRows({
+export function TaskRows({
   tasks,
+  sortable = false,
+  onReorder = () => {},
   onOpen,
   onToggle,
+  onStar,
   onDelete,
 }: {
   tasks: TaskItem[];
+  sortable?: boolean;
+  onReorder?: (ids: string[]) => void;
   onOpen: (id: string) => void;
   onToggle: (item: TaskItem) => void;
+  onStar: (item: TaskItem) => void;
   onDelete: (item: TaskItem) => void;
 }) {
   return (
-    <ul className="divide-border divide-y">
+    <SortableList
+      ids={tasks.map((item) => item.id)}
+      onReorder={onReorder}
+      disabled={!sortable}
+    >
       {tasks.map((item) => (
-        <li key={item.id} className="group flex items-center gap-3 py-2.5">
+        <SortableRow
+          key={item.id}
+          id={item.id}
+          disabled={!sortable}
+          className="py-2.5"
+        >
           <Checkbox
             checked={item.completed}
             onCheckedChange={() => onToggle(item)}
-            aria-label={`Mark "${item.title}" complete`}
+            aria-label={
+              item.completed
+                ? `Mark "${item.title}" not complete`
+                : `Mark "${item.title}" complete`
+            }
           />
 
           <button
@@ -142,31 +176,35 @@ function TaskRows({
             onClick={() => onOpen(item.id)}
             className="min-w-0 flex-1 text-left"
           >
-            <span
-              className={cn(
-                "block truncate transition-colors",
-                item.completed && "text-muted-foreground line-through",
-              )}
-            >
-              {item.title}
+            <span className="flex items-center gap-2">
+              {isOverdue(item) && <OverdueDot />}
+              <span
+                className={cn(
+                  "block truncate transition-colors",
+                  item.completed && "text-muted-foreground line-through",
+                )}
+              >
+                {item.title}
+              </span>
             </span>
             <TaskMeta task={item} />
           </button>
 
           <PriorityDot priority={item.priority} />
+          <StarButton active={item.important} onToggle={() => onStar(item)} />
 
           <Button
             variant="ghost"
             size="icon"
             aria-label={`Delete "${item.title}"`}
-            className="transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+            className="transition-opacity md:opacity-0 md:group-hover/row:opacity-100 md:group-focus-within/row:opacity-100"
             onClick={() => onDelete(item)}
           >
             <Trash2 />
           </Button>
-        </li>
+        </SortableRow>
       ))}
-    </ul>
+    </SortableList>
   );
 }
 

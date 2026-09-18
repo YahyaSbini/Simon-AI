@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { RoutinesView } from "@/components/routines-view";
 import { getRoutines } from "@/lib/data";
 import { getSession } from "@/lib/session";
+import { getTimeZone, todayIn } from "@/lib/timezone";
 
 export default async function RoutinesPage() {
   const session = await getSession();
@@ -10,7 +11,8 @@ export default async function RoutinesPage() {
     redirect("/sign-in");
   }
 
-  const routines = await getRoutines(session.user.id);
+  const date = todayIn(await getTimeZone());
+  const routines = await getRoutines(session.user.id, date);
 
   return (
     <div className="space-y-6">
@@ -21,7 +23,7 @@ export default async function RoutinesPage() {
         </p>
       </header>
 
-      <RoutinesView initialRoutines={routines} />
+      <RoutinesView initialRoutines={routines} date={date} />
     </div>
   );
 }

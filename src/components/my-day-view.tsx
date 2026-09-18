@@ -2,21 +2,26 @@
 
 import { CalendarDays, Repeat } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
+import { RoutineEditor } from "@/components/routine-editor";
+import { SortableList, SortableRow } from "@/components/sortable-list";
+import { SearchField, StarButton } from "@/components/task-bits";
 import { TaskDetail } from "@/components/task-detail";
 import { useTasks, useTaskStore } from "@/components/task-store";
-import { PriorityDot, TaskMeta } from "@/components/task-view";
+import { PriorityDot, TaskRows } from "@/components/task-view";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { formatMinutes } from "@/lib/dates";
-import { taskMatches } from "@/lib/task-views";
+import { playCompleteSound } from "@/lib/sound";
+import { searchMatches, taskMatches } from "@/lib/task-views";
 import type {
   CalendarAgenda,
   CalendarEvent,
   ListItem,
   RoutineOccurrence,
+  StepItem,
   TaskItem,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -42,10 +47,22 @@ export function MyDayView({
   const tasks = useTasks(initialTasks, matches);
   const [routines, setRoutines] = useState(initialRoutines);
   const [title, setTitle] = useState("");
+  const [query, setQuery] = useState("");
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const [openRoutineId, setOpenRoutineId] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
   const openTask = store.tasks[openTaskId ?? ""] ?? null;
+  const openRoutine = routines.find((item) => item.id === openRoutineId) ?? null;
+  const filtering = query.trim().length > 0;
+  const visibleTasks = useMemo(
+    () => tasks.filter((item) => searchMatches(item, query)),
+    [tasks, query],
+  );
+  const visibleRoutines = useMemo(
+    () => routines.filter((item) => searchMatches(item, query)),
+    [routines, query],
+  );
 
   const remaining =
     tasks.reduce(sumEstimate, 0) +
@@ -69,17 +86,56 @@ export function MyDayView({
     });
   }
 
-  function completeTask(item: TaskItem) {
-    store.patchTask(item, { completed: true }, { completed: true });
-  }
-
   function deleteTask(item: TaskItem) {
     setOpenTaskId(null);
     store.deleteTask(item);
   }
 
+  function patchRoutine(item: RoutineOccurrence, changes: Partial<RoutineOccurrence>) {
+    setRoutines((current) =>
+      current.map((entry) =>
+        entry.id === item.id ? { ...entry, ...changes } : entry,
+      ),
+    );
+
+    void fetch(`/api/routines/${item.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(changes),
+    }).then((response) => {
+      if (!response.ok) {
+        toast.error("Couldn't update that routine.");
+        setRoutines((current) =>
+          current.map((entry) => (entry.id === item.id ? item : entry)),
+        );
+      }
+    });
+  }
+
+  function setRoutineSteps(routineId: string, steps: StepItem[]) {
+    setRoutines((current) =>
+      current.map((entry) =>
+        entry.id === routineId ? { ...entry, steps } : entry,
+      ),
+    );
+  }
+
+  function reorderRoutines(ids: string[]) {
+    const byId = new Map(routines.map((item) => [item.id, item]));
+    setRoutines(ids.map((id) => byId.get(id)!).filter(Boolean));
+
+    void fetch("/api/routines/reorder", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    }).then((response) => {
+      if (!response.ok) toast.error("Couldn't save the new order.");
+    });
+  }
+
   function toggleRoutine(item: RoutineOccurrence) {
     const completed = !item.completed;
+    if (completed) playCompleteSound();
 
     setRoutines((current) =>
       current.map((entry) =>
@@ -144,63 +200,121 @@ export function MyDayView({
         </p>
       )}
 
-      <ul className="divide-border divide-y">
-        {routines.map((item) => (
-          <li
-            key={`routine-${item.id}`}
-            className="flex items-center gap-3 py-2.5"
-          >
-            <Checkbox
-              checked={item.completed}
-              onCheckedChange={() => toggleRoutine(item)}
-              aria-label={`Mark routine "${item.title}" done today`}
-            />
-            <div className="min-w-0 flex-1">
-              <span
-                className={cn(
-                  "block truncate",
-                  item.completed && "text-muted-foreground line-through",
-                )}
-              >
-                {item.title}
-              </span>
-              <span className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-3 text-xs">
-                <span className="inline-flex items-center gap-1">
-                  <Repeat className="size-3" />
-                  Routine
-                </span>
-                {item.timeOfDay && <span>{item.timeOfDay}</span>}
-                {item.estimatedMinutes && (
-                  <span>{formatMinutes(item.estimatedMinutes)}</span>
-                )}
-              </span>
-            </div>
-            <PriorityDot priority={item.priority} />
-          </li>
-        ))}
+      {!empty && <SearchField value={query} onChange={setQuery} />}
 
-        {tasks.map((item) => (
-          <li
-            key={`task-${item.id}`}
-            className="flex items-center gap-3 py-2.5"
-          >
-            <Checkbox
-              checked={item.completed}
-              onCheckedChange={() => completeTask(item)}
-              aria-label={`Mark "${item.title}" complete`}
-            />
-            <button
-              type="button"
-              onClick={() => setOpenTaskId(item.id)}
-              className="min-w-0 flex-1 text-left"
+      {!empty && filtering && visibleTasks.length + visibleRoutines.length === 0 && (
+        <p className="text-muted-foreground px-4 py-10 text-center text-sm">
+          Nothing matches “{query.trim()}”.
+        </p>
+      )}
+
+      {visibleTasks.length > 0 && (
+        <TaskRows
+          tasks={visibleTasks}
+          sortable={!filtering}
+          onReorder={store.reorderTasks}
+          onOpen={setOpenTaskId}
+          onToggle={(item) =>
+            store.patchTask(item, { completed: true }, { completed: true })
+          }
+          onStar={(item) =>
+            store.patchTask(
+              item,
+              { important: !item.important },
+              { important: !item.important },
+            )
+          }
+          onDelete={deleteTask}
+        />
+      )}
+
+      {visibleRoutines.length > 0 && (
+        <section className="space-y-1">
+          {visibleTasks.length > 0 && (
+            <div
+              role="separator"
+              className="text-muted-foreground flex items-center gap-3 pt-2 text-xs tracking-wide uppercase"
             >
-              <span className="block truncate">{item.title}</span>
-              <TaskMeta task={item} />
-            </button>
-            <PriorityDot priority={item.priority} />
-          </li>
-        ))}
-      </ul>
+              <span className="bg-border h-px flex-1" />
+              <span className="inline-flex items-center gap-1.5">
+                <Repeat className="size-3" />
+                Routines
+              </span>
+              <span className="bg-border h-px flex-1" />
+            </div>
+          )}
+
+          <SortableList
+            ids={visibleRoutines.map((item) => item.id)}
+            onReorder={reorderRoutines}
+            disabled={filtering}
+          >
+            {visibleRoutines.map((item) => (
+              <SortableRow
+                key={item.id}
+                id={item.id}
+                disabled={filtering}
+                className="py-2.5"
+              >
+                <Checkbox
+                  checked={item.completed}
+                  onCheckedChange={() => toggleRoutine(item)}
+                  aria-label={`Mark routine "${item.title}" done today`}
+                />
+                <button
+                  type="button"
+                  onClick={() => setOpenRoutineId(item.id)}
+                  className="min-w-0 flex-1 text-left"
+                >
+                  <span
+                    className={cn(
+                      "block truncate",
+                      item.completed && "text-muted-foreground line-through",
+                    )}
+                  >
+                    {item.title}
+                  </span>
+                  <span className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-3 text-xs">
+                    {item.timeOfDay && <span>{item.timeOfDay}</span>}
+                    {item.estimatedMinutes && (
+                      <span>{formatMinutes(item.estimatedMinutes)}</span>
+                    )}
+                    {item.steps.length > 0 && (
+                      <span>
+                        {item.steps.filter((step) => step.completed).length} of{" "}
+                        {item.steps.length} steps
+                      </span>
+                    )}
+                  </span>
+                </button>
+                <PriorityDot priority={item.priority} />
+                <StarButton
+                  active={item.important}
+                  onToggle={() =>
+                    patchRoutine(item, { important: !item.important })
+                  }
+                />
+              </SortableRow>
+            ))}
+          </SortableList>
+        </section>
+      )}
+
+      <RoutineEditor
+        open={openRoutine !== null}
+        routine={openRoutine}
+        date={date}
+        onClose={() => setOpenRoutineId(null)}
+        onStepsChange={setRoutineSteps}
+        onSaved={(item) => {
+          setRoutines((current) =>
+            current.map((entry) =>
+              entry.id === item.id ? { ...entry, ...item } : entry,
+            ),
+          );
+          setOpenRoutineId(null);
+        }}
+      />
 
       <TaskDetail
         task={openTask}
