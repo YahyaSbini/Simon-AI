@@ -281,8 +281,7 @@ export function MyDayView({
                     )}
                     {item.steps.length > 0 && (
                       <span>
-                        {item.steps.filter((step) => step.completed).length} of{" "}
-                        {item.steps.length} steps
+                        {`${item.steps.filter((step) => step.completed).length} of ${item.steps.length} steps`}
                       </span>
                     )}
                   </span>
