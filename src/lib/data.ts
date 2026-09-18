@@ -219,7 +219,7 @@ export async function getMyDayTasks(
     .select()
     .from(task)
     .where(eq(task.userId, userId))
-    .orderBy(asc(task.dueAt), asc(task.position));
+    .orderBy(asc(task.position), asc(task.dueAt));
 
   const relevant = rows.filter(
     (row) =>

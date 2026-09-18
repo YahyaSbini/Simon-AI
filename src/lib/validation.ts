@@ -31,6 +31,14 @@ export const routineInput = z.object({
   active: z.boolean().optional(),
 });
 
+/** Inclusive range check shared by create and (merged) update. */
+export function validDateRange(range: {
+  startDate: string;
+  endDate?: string | null;
+}): boolean {
+  return !range.endDate || range.endDate >= range.startDate;
+}
+
 export const reorderInput = z.object({
   ids: z.array(z.string().uuid()).min(1).max(500),
 });

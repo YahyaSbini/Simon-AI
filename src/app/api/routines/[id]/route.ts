@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { routine } from "@/db/schema";
 import { requireUserId } from "@/lib/session";
-import { routineInput } from "@/lib/validation";
+import { routineInput, validDateRange } from "@/lib/validation";
 
 const updateRoutineSchema = routineInput.partial();
 
@@ -26,6 +26,30 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   }
 
   const { id } = await params;
+
+  if (parsed.data.startDate !== undefined || parsed.data.endDate !== undefined) {
+    const [existing] = await db
+      .select({ startDate: routine.startDate, endDate: routine.endDate })
+      .from(routine)
+      .where(and(eq(routine.id, id), eq(routine.userId, userId)));
+
+    if (!existing) {
+      return NextResponse.json({ error: "Routine not found." }, { status: 404 });
+    }
+
+    const merged = {
+      startDate: parsed.data.startDate ?? existing.startDate,
+      endDate:
+        parsed.data.endDate === undefined ? existing.endDate : parsed.data.endDate,
+    };
+
+    if (!validDateRange(merged)) {
+      return NextResponse.json(
+        { error: "The end date must not be before the start date." },
+        { status: 400 },
+      );
+    }
+  }
 
   const [updated] = await db
     .update(routine)

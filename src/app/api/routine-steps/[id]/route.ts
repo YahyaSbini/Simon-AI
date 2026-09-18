@@ -37,6 +37,14 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   }
 
   const { completed, date, title } = parsed.data;
+
+  if (completed !== undefined && !date) {
+    return NextResponse.json(
+      { error: "A date is required to tick a step." },
+      { status: 400 },
+    );
+  }
+
   const { id } = await params;
 
   const [step] = await db
@@ -54,13 +62,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     await db.update(routineStep).set({ title }).where(eq(routineStep.id, id));
   }
 
-  if (completed !== undefined) {
-    if (!date) {
-      return NextResponse.json(
-        { error: "A date is required to tick a step." },
-        { status: 400 },
-      );
-    }
+  if (completed !== undefined && date) {
     if (completed) {
       await db
         .insert(routineStepCompletion)
