@@ -1,140 +1,72 @@
 "use client";
 
 import { Pencil, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { selectClass } from "@/components/task-detail";
+import { RoutineEditor } from "@/components/routine-editor";
+import { SortableList, SortableRow } from "@/components/sortable-list";
+import { SearchField, StarButton } from "@/components/task-bits";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { formatMinutes, today } from "@/lib/dates";
-import { describeRecurrence } from "@/lib/routines";
-import { priorities, priorityLabels, type RoutineItem } from "@/lib/types";
+import { formatMinutes } from "@/lib/dates";
+import { searchMatches } from "@/lib/task-views";
+import { priorityLabels, type RoutineItem, type StepItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
-
-const weekdays = [
-  { value: 1, label: "Mon" },
-  { value: 2, label: "Tue" },
-  { value: 3, label: "Wed" },
-  { value: 4, label: "Thu" },
-  { value: 5, label: "Fri" },
-  { value: 6, label: "Sat" },
-  { value: 7, label: "Sun" },
-];
-
-type Draft = {
-  title: string;
-  frequency: RoutineItem["frequency"];
-  interval: number;
-  byWeekday: number[];
-  byMonthDay: number;
-  timeOfDay: string;
-  estimatedMinutes: string;
-  priority: RoutineItem["priority"];
-};
-
-function emptyDraft(): Draft {
-  const now = new Date();
-  return {
-    title: "",
-    frequency: "daily",
-    interval: 1,
-    byWeekday: [((now.getDay() + 6) % 7) + 1],
-    byMonthDay: now.getDate(),
-    timeOfDay: "",
-    estimatedMinutes: "",
-    priority: "none",
-  };
-}
-
-function toDraft(routine: RoutineItem): Draft {
-  return {
-    title: routine.title,
-    frequency: routine.frequency,
-    interval: routine.interval,
-    byWeekday: routine.byWeekday ?? [],
-    byMonthDay: routine.byMonthDay ?? 1,
-    timeOfDay: routine.timeOfDay ?? "",
-    estimatedMinutes: routine.estimatedMinutes?.toString() ?? "",
-    priority: routine.priority,
-  };
-}
 
 export function RoutinesView({
   initialRoutines,
+  date,
 }: {
   initialRoutines: RoutineItem[];
+  date: string;
 }) {
   const [routines, setRoutines] = useState(initialRoutines);
-  const [editing, setEditing] = useState<RoutineItem | null>(null);
-  const [draft, setDraft] = useState<Draft | null>(null);
-  const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [query, setQuery] = useState("");
+
+  const editing = routines.find((item) => item.id === editingId) ?? null;
+  const visible = useMemo(
+    () => routines.filter((item) => searchMatches(item, query)),
+    [routines, query],
+  );
+  const filtering = query.trim().length > 0;
 
   function openNew() {
-    setEditing(null);
-    setDraft(emptyDraft());
+    setEditingId(null);
+    setSheetOpen(true);
   }
 
   function openEdit(routine: RoutineItem) {
-    setEditing(routine);
-    setDraft(toDraft(routine));
+    setEditingId(routine.id);
+    setSheetOpen(true);
   }
 
-  async function save() {
-    if (!draft) return;
-
-    const title = draft.title.trim();
-
-    if (!title) {
-      toast.error("Give the routine a name.");
-      return;
-    }
-
-    const body = {
-      title,
-      frequency: draft.frequency,
-      interval: draft.interval,
-      byWeekday: draft.frequency === "weekly" ? draft.byWeekday : null,
-      byMonthDay: draft.frequency === "monthly" ? draft.byMonthDay : null,
-      timeOfDay: draft.timeOfDay || null,
-      estimatedMinutes: draft.estimatedMinutes
-        ? Number(draft.estimatedMinutes)
-        : null,
-      priority: draft.priority,
-      startDate: editing?.startDate ?? today(),
-    };
-
-    setSaving(true);
-    const response = await fetch(
-      editing ? `/api/routines/${editing.id}` : "/api/routines",
-      {
-        method: editing ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      },
-    );
-    setSaving(false);
-
-    if (!response.ok) {
-      toast.error("Couldn't save that routine.");
-      return;
-    }
-
-    const { routine } = await response.json();
-    const item: RoutineItem = {
-      ...routine,
-      recurrence: describeRecurrence(routine),
-    };
-
+  function patch(routine: RoutineItem, changes: Partial<RoutineItem>) {
     setRoutines((current) =>
-      editing
-        ? current.map((entry) => (entry.id === item.id ? item : entry))
-        : [...current, item],
+      current.map((item) =>
+        item.id === routine.id ? { ...item, ...changes } : item,
+      ),
     );
-    setDraft(null);
-    setEditing(null);
+
+    void fetch(`/api/routines/${routine.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(changes),
+    }).then((response) => {
+      if (!response.ok) {
+        toast.error("Couldn't update that routine.");
+        setRoutines((current) =>
+          current.map((item) => (item.id === routine.id ? routine : item)),
+        );
+      }
+    });
+  }
+
+  function setSteps(routineId: string, steps: StepItem[]) {
+    setRoutines((current) =>
+      current.map((item) => (item.id === routineId ? { ...item, steps } : item)),
+    );
   }
 
   async function remove(routine: RoutineItem) {
@@ -150,54 +82,78 @@ export function RoutinesView({
     }
   }
 
-  async function toggleActive(routine: RoutineItem) {
-    const active = !routine.active;
+  function reorder(ids: string[]) {
+    const byId = new Map(routines.map((item) => [item.id, item]));
+    setRoutines(ids.map((id) => byId.get(id)!).filter(Boolean));
 
-    setRoutines((current) =>
-      current.map((item) => (item.id === routine.id ? { ...item, active } : item)),
-    );
-
-    const response = await fetch(`/api/routines/${routine.id}`, {
+    void fetch("/api/routines/reorder", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ active }),
+      body: JSON.stringify({ ids }),
+    }).then((response) => {
+      if (!response.ok) toast.error("Couldn't save the new order.");
     });
-
-    if (!response.ok) {
-      toast.error("Couldn't update that routine.");
-      setRoutines((current) =>
-        current.map((item) => (item.id === routine.id ? routine : item)),
-      );
-    }
   }
 
   return (
     <div className="space-y-6">
-      <Button onClick={openNew}>New routine</Button>
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <Button onClick={openNew} className="sm:order-2">
+          New routine
+        </Button>
+        {routines.length > 0 && (
+          <div className="flex-1 sm:order-1">
+            <SearchField
+              value={query}
+              onChange={setQuery}
+              placeholder="Search routines"
+            />
+          </div>
+        )}
+      </div>
 
       {routines.length === 0 ? (
         <p className="text-muted-foreground border-border rounded-lg border border-dashed px-4 py-10 text-center">
           No routines yet. Add the things you repeat daily or weekly.
         </p>
+      ) : visible.length === 0 ? (
+        <p className="text-muted-foreground px-4 py-10 text-center text-sm">
+          No routines match “{query.trim()}”.
+        </p>
       ) : (
-        <ul className="divide-border divide-y">
-          {routines.map((routine) => (
-            <li key={routine.id} className="group flex items-center gap-3 py-3">
+        <SortableList
+          ids={visible.map((item) => item.id)}
+          onReorder={reorder}
+          disabled={filtering}
+        >
+          {visible.map((routine) => (
+            <SortableRow
+              key={routine.id}
+              id={routine.id}
+              disabled={filtering}
+              className="py-3"
+            >
               <Checkbox
                 checked={routine.active}
-                onCheckedChange={() => toggleActive(routine)}
+                onCheckedChange={() =>
+                  patch(routine, { active: !routine.active })
+                }
                 aria-label={`${routine.active ? "Pause" : "Resume"} ${routine.title}`}
               />
-              <div className="min-w-0 flex-1">
-                <p
+              <button
+                type="button"
+                onClick={() => openEdit(routine)}
+                className="min-w-0 flex-1 text-left"
+              >
+                <span
                   className={cn(
-                    "truncate",
+                    "block truncate",
                     !routine.active && "text-muted-foreground",
                   )}
                 >
                   {routine.title}
-                </p>
-                <p className="text-muted-foreground text-xs">
+                </span>
+                <span className="text-muted-foreground block text-xs">
                   {[
                     routine.recurrence,
                     routine.timeOfDay,
@@ -207,16 +163,25 @@ export function RoutinesView({
                     routine.priority === "none"
                       ? null
                       : `${priorityLabels[routine.priority]} priority`,
+                    routine.steps.length
+                      ? `${routine.steps.length} step${routine.steps.length === 1 ? "" : "s"}`
+                      : null,
                   ]
                     .filter(Boolean)
                     .join(" · ")}
-                </p>
-              </div>
+                </span>
+              </button>
+              <StarButton
+                active={routine.important}
+                onToggle={() =>
+                  patch(routine, { important: !routine.important })
+                }
+              />
               <Button
                 variant="ghost"
                 size="icon"
                 aria-label={`Edit ${routine.title}`}
-                className="transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+                className="transition-opacity md:opacity-0 md:group-hover/row:opacity-100 md:group-focus-within/row:opacity-100"
                 onClick={() => openEdit(routine)}
               >
                 <Pencil />
@@ -225,194 +190,35 @@ export function RoutinesView({
                 variant="ghost"
                 size="icon"
                 aria-label={`Delete ${routine.title}`}
-                className="transition-opacity md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
+                className="transition-opacity md:opacity-0 md:group-hover/row:opacity-100 md:group-focus-within/row:opacity-100"
                 onClick={() => remove(routine)}
               >
                 <Trash2 />
               </Button>
-            </li>
+            </SortableRow>
           ))}
-        </ul>
+        </SortableList>
       )}
 
-      <Sheet
-        open={draft !== null}
-        onOpenChange={(open) => !open && setDraft(null)}
-      >
-        <SheetContent side="right" className="w-full gap-0 overflow-y-auto sm:max-w-md">
-          <SheetTitle className="p-4 text-lg">
-            {editing ? "Edit routine" : "New routine"}
-          </SheetTitle>
-
-          {draft && (
-            <div className="space-y-5 px-4 pb-4">
-              <div className="space-y-1.5">
-                <Label htmlFor="routine-title">Name</Label>
-                <Input
-                  id="routine-title"
-                  value={draft.title}
-                  onChange={(event) =>
-                    setDraft({ ...draft, title: event.target.value })
-                  }
-                  placeholder="Morning review"
-                  maxLength={200}
-                  autoFocus
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="routine-frequency">Repeats</Label>
-                  <select
-                    id="routine-frequency"
-                    className={selectClass}
-                    value={draft.frequency}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        frequency: event.target
-                          .value as RoutineItem["frequency"],
-                      })
-                    }
-                  >
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly">Monthly</option>
-                  </select>
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="routine-interval">Every</Label>
-                  <Input
-                    id="routine-interval"
-                    type="number"
-                    min={1}
-                    max={365}
-                    value={draft.interval}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        interval: Math.max(1, Number(event.target.value) || 1),
-                      })
-                    }
-                  />
-                </div>
-              </div>
-
-              {draft.frequency === "weekly" && (
-                <div className="space-y-1.5">
-                  <Label>On days</Label>
-                  <div className="flex flex-wrap gap-1.5">
-                    {weekdays.map((day) => {
-                      const selected = draft.byWeekday.includes(day.value);
-                      return (
-                        <Button
-                          key={day.value}
-                          size="sm"
-                          variant={selected ? "default" : "outline"}
-                          aria-pressed={selected}
-                          onClick={() =>
-                            setDraft({
-                              ...draft,
-                              byWeekday: selected
-                                ? draft.byWeekday.filter(
-                                    (value) => value !== day.value,
-                                  )
-                                : [...draft.byWeekday, day.value],
-                            })
-                          }
-                        >
-                          {day.label}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {draft.frequency === "monthly" && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="routine-monthday">Day of month</Label>
-                  <Input
-                    id="routine-monthday"
-                    type="number"
-                    min={1}
-                    max={31}
-                    value={draft.byMonthDay}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        byMonthDay: Number(event.target.value) || 1,
-                      })
-                    }
-                  />
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="routine-time">Time of day</Label>
-                  <Input
-                    id="routine-time"
-                    type="time"
-                    value={draft.timeOfDay}
-                    onChange={(event) =>
-                      setDraft({ ...draft, timeOfDay: event.target.value })
-                    }
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="routine-estimate">Estimate (minutes)</Label>
-                  <Input
-                    id="routine-estimate"
-                    type="number"
-                    min={1}
-                    max={1440}
-                    value={draft.estimatedMinutes}
-                    onChange={(event) =>
-                      setDraft({
-                        ...draft,
-                        estimatedMinutes: event.target.value,
-                      })
-                    }
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="routine-priority">Priority</Label>
-                <select
-                  id="routine-priority"
-                  className={selectClass}
-                  value={draft.priority}
-                  onChange={(event) =>
-                    setDraft({
-                      ...draft,
-                      priority: event.target.value as RoutineItem["priority"],
-                    })
-                  }
-                >
-                  {priorities.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="flex gap-2">
-                <Button onClick={save} disabled={saving}>
-                  {editing ? "Save routine" : "Create routine"}
-                </Button>
-                <Button variant="ghost" onClick={() => setDraft(null)}>
-                  Cancel
-                </Button>
-              </div>
-            </div>
-          )}
-        </SheetContent>
-      </Sheet>
+      <RoutineEditor
+        open={sheetOpen}
+        routine={editing}
+        date={date}
+        onClose={() => setSheetOpen(false)}
+        onStepsChange={setSteps}
+        onSaved={(item, created) => {
+          setRoutines((current) =>
+            created
+              ? [...current, item]
+              : current.map((entry) => (entry.id === item.id ? item : entry)),
+          );
+          if (created) {
+            setEditingId(item.id);
+          } else {
+            setSheetOpen(false);
+          }
+        }}
+      />
     </div>
   );
 }

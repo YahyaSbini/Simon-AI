@@ -3,7 +3,7 @@ import { TaskView } from "@/components/task-view";
 import { getLists, getTasks } from "@/lib/data";
 import { getSession } from "@/lib/session";
 
-export default async function ImportantPage() {
+export default async function CompletedPage() {
   const session = await getSession();
 
   if (!session) {
@@ -11,22 +11,22 @@ export default async function ImportantPage() {
   }
 
   const [tasks, lists] = await Promise.all([
-    getTasks(session.user.id, "important"),
+    getTasks(session.user.id, "completed"),
     getLists(session.user.id),
   ]);
 
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="font-heading text-3xl">Important</h1>
-        <p className="text-muted-foreground">Tasks you have starred.</p>
+        <h1 className="font-heading text-3xl">Ticked Tasks</h1>
+        <p className="text-muted-foreground">Everything you have ticked off. Untick a task to bring it back.</p>
       </header>
 
       <TaskView
         initialTasks={tasks}
         lists={lists}
-        view="important"
-        emptyMessage="Nothing starred. Tap the star on any task and it shows up here."
+        view="completed"
+        emptyMessage="Nothing ticked yet. Completed tasks land here."
       />
     </div>
   );

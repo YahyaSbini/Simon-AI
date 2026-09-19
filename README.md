@@ -5,11 +5,13 @@ a My Day view, and read-only Google Calendar.
 
 ## Views
 
-- **My Day** — today's Google Calendar events, routine occurrences, and tasks (flagged for today or due), with remaining time.
-- **Settings** — connect or disconnect Google Calendar.
+- **My Day** — today's Google Calendar events, tasks (flagged for today or due), then a divider and today's routine occurrences, with remaining time.
+- **Settings** — connect or disconnect Google Calendar; completion sound on/off (per device).
 - **Tasks / lists** — inline add, task detail panel with priority, estimate, due date, steps, notes.
-- **Important** — medium and high priority tasks. **Planned** — everything with a due date.
-- **Routines** — daily / every N days / weekly by weekday / monthly by date, completed per date.
+- **Important** — starred tasks. **Planned** — everything with a due date. **Ticked Tasks** — completed tasks, newest first.
+- **Routines** — daily / every N days / weekly / monthly, optional weekday picks and from/to dates, steps that reset per day.
+
+Every list has a live search box, drag handles to reorder (order is saved), a star to mark important, and a red dot on overdue tasks.
 
 ## Stack
 

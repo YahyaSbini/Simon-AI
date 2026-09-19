@@ -11,6 +11,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import { playCompleteSound } from "@/lib/sound";
 import type { StepItem, TaskItem } from "@/lib/types";
 
 type TaskMap = Record<string, TaskItem>;
@@ -31,6 +32,10 @@ type TaskStore = {
   patchTask: (item: TaskItem, changes: Partial<TaskItem>, body: object) => void;
   deleteTask: (item: TaskItem) => void;
   setSteps: (taskId: string, steps: StepItem[]) => void;
+  /** Apply and persist a new visual order for the given tasks. */
+  reorderTasks: (ids: string[]) => void;
+  /** Most recent client-side ordering; wins over server order until refresh. */
+  sequence: string[];
 };
 
 const TaskStoreContext = createContext<TaskStore | null>(null);
@@ -39,6 +44,7 @@ const CHANNEL = "simon-tasks";
 export function TaskStoreProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const [tasks, setTasks] = useState<TaskMap>({});
+  const [sequence, setSequence] = useState<string[]>([]);
   const channel = useRef<BroadcastChannel | null>(null);
 
   useEffect(() => {
@@ -122,6 +128,7 @@ export function TaskStoreProvider({ children }: { children: React.ReactNode }) {
         notes: task.notes ?? null,
         listId: task.listId ?? null,
         priority: task.priority,
+        important: task.important ?? false,
         estimatedMinutes: task.estimatedMinutes ?? null,
         dueAt: task.dueAt ?? null,
         myDayDate: task.myDayDate ?? null,
@@ -137,6 +144,7 @@ export function TaskStoreProvider({ children }: { children: React.ReactNode }) {
   const patchTask = useCallback<TaskStore["patchTask"]>(
     (item, changes, body) => {
       upsert({ ...item, ...changes });
+      if (changes.completed && !item.completed) playCompleteSound();
 
       void fetch(`/api/tasks/${item.id}`, {
         method: "PATCH",
@@ -181,9 +189,42 @@ export function TaskStoreProvider({ children }: { children: React.ReactNode }) {
     [broadcast],
   );
 
+  const reorderTasks = useCallback<TaskStore["reorderTasks"]>((ids) => {
+    setSequence((current) => [
+      ...ids,
+      ...current.filter((id) => !ids.includes(id)),
+    ]);
+
+    void fetch("/api/tasks/reorder", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids }),
+    }).then((response) => {
+      if (!response.ok) toast.error("Couldn't save the new order.");
+    });
+  }, []);
+
   const value = useMemo<TaskStore>(
-    () => ({ tasks, hydrate, createTask, patchTask, deleteTask, setSteps }),
-    [tasks, hydrate, createTask, patchTask, deleteTask, setSteps],
+    () => ({
+      tasks,
+      hydrate,
+      createTask,
+      patchTask,
+      deleteTask,
+      setSteps,
+      reorderTasks,
+      sequence,
+    }),
+    [
+      tasks,
+      hydrate,
+      createTask,
+      patchTask,
+      deleteTask,
+      setSteps,
+      reorderTasks,
+      sequence,
+    ],
   );
 
   return (
@@ -208,7 +249,7 @@ export function useTasks(
   initialTasks: TaskItem[],
   matches: (task: TaskItem) => boolean,
 ): TaskItem[] {
-  const { tasks, hydrate } = useTaskStore();
+  const { tasks, hydrate, sequence } = useTaskStore();
   const [hydrated, setHydrated] = useState(false);
 
   useEffect(() => {
@@ -225,8 +266,18 @@ export function useTasks(
     const newcomers = Object.values(source).filter(
       (item) => !order.has(item.id) && matches(item),
     );
-    return [...newcomers, ...fromServer];
-  }, [hydrated, tasks, initialTasks, matches]);
+    return applySequence([...newcomers, ...fromServer], sequence);
+  }, [hydrated, tasks, initialTasks, matches, sequence]);
+}
+
+function applySequence(items: TaskItem[], sequence: string[]): TaskItem[] {
+  if (!sequence.length) return items;
+  const rank = new Map(sequence.map((id, index) => [id, index]));
+  const ordered = items.filter((item) => rank.has(item.id));
+  if (ordered.length < 2) return items;
+  ordered.sort((a, b) => rank.get(a.id)! - rank.get(b.id)!);
+  let cursor = 0;
+  return items.map((item) => (rank.has(item.id) ? ordered[cursor++] : item));
 }
 
 function without(map: TaskMap, id: string): TaskMap {

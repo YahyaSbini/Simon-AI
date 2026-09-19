@@ -11,6 +11,7 @@ const updateTaskSchema = z.object({
   notes: z.string().trim().max(2000).nullish(),
   listId: z.string().uuid().nullish(),
   priority: z.enum(["none", "low", "medium", "high"]).optional(),
+  important: z.boolean().optional(),
   estimatedMinutes: z.number().int().min(1).max(1440).nullish(),
   dueAt: timestamp.nullish(),
   myDayDate: dateKey.nullish(),

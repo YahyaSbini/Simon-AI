@@ -96,6 +96,7 @@ export const task = pgTable(
     title: text("title").notNull(),
     notes: text("notes"),
     priority: priority("priority").notNull().default("none"),
+    important: boolean("important").notNull().default(false),
     estimatedMinutes: integer("estimated_minutes"),
     dueAt: timestamp("due_at"),
     myDayDate: date("my_day_date"),
@@ -137,6 +138,7 @@ export const routine = pgTable(
     title: text("title").notNull(),
     notes: text("notes"),
     priority: priority("priority").notNull().default("none"),
+    important: boolean("important").notNull().default(false),
     estimatedMinutes: integer("estimated_minutes"),
     frequency: frequency("frequency").notNull().default("daily"),
     /** Repeat every N days/weeks/months, depending on `frequency`. */
@@ -148,6 +150,9 @@ export const routine = pgTable(
     /** Local time of day as HH:MM. */
     timeOfDay: text("time_of_day"),
     startDate: date("start_date").notNull(),
+    /** Last day the routine repeats, inclusive. */
+    endDate: date("end_date"),
+    position: integer("position").notNull().default(0),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -170,9 +175,40 @@ export const routineCompletion = pgTable(
   ],
 );
 
+export const routineStep = pgTable(
+  "routine_step",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    routineId: uuid("routine_id")
+      .notNull()
+      .references(() => routine.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("routine_step_routine_id_idx").on(t.routineId)],
+);
+
+/** A routine step ticked on a given day; steps reset with each occurrence. */
+export const routineStepCompletion = pgTable(
+  "routine_step_completion",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    stepId: uuid("step_id")
+      .notNull()
+      .references(() => routineStep.id, { onDelete: "cascade" }),
+    date: date("date").notNull(),
+    completedAt: timestamp("completed_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("routine_step_completion_step_date_idx").on(t.stepId, t.date),
+  ],
+);
+
 export type List = typeof list.$inferSelect;
 export type Task = typeof task.$inferSelect;
 export type TaskStep = typeof taskStep.$inferSelect;
 export type Routine = typeof routine.$inferSelect;
+export type RoutineStep = typeof routineStep.$inferSelect;
 export type Priority = (typeof priority.enumValues)[number];
 export type Frequency = (typeof frequency.enumValues)[number];

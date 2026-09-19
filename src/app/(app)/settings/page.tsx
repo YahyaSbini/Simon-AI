@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { CalendarConnection } from "@/components/calendar-connection";
+import { SoundSetting } from "@/components/sound-setting";
 import { getCalendarStatus } from "@/lib/calendar";
 import { getSession } from "@/lib/session";
 
@@ -22,6 +23,7 @@ export default async function SettingsPage() {
       </header>
 
       <CalendarConnection status={status} />
+      <SoundSetting />
     </div>
   );
 }
