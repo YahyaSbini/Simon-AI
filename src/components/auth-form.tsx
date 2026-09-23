@@ -44,7 +44,7 @@ export function AuthForm({ googleEnabled }: { googleEnabled: boolean }) {
       return;
     }
 
-    router.push("/my-day");
+    router.push("/home");
     router.refresh();
   }
 
@@ -116,7 +116,7 @@ export function AuthForm({ googleEnabled }: { googleEnabled: boolean }) {
                 setPending(true);
                 const { error } = await signIn.social({
                   provider: "google",
-                  callbackURL: "/my-day",
+                  callbackURL: "/home",
                 });
                 if (error) {
                   setPending(false);

@@ -3,6 +3,8 @@
 import {
   CalendarClock,
   CheckCheck,
+  Home,
+  Landmark,
   ListTodo,
   Menu,
   Plus,
@@ -30,15 +32,65 @@ import {
 import type { ListItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-const views = [
-  { href: "/my-day", label: "My Day", icon: Sun },
-  { href: "/important", label: "Important", icon: Star },
-  { href: "/planned", label: "Planned", icon: CalendarClock },
-  { href: "/tasks", label: "Tasks", icon: ListTodo },
-  { href: "/routines", label: "Routines", icon: Repeat },
-  { href: "/completed", label: "Ticked Tasks", icon: CheckCheck },
-  { href: "/settings", label: "Settings", icon: Settings },
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+};
+
+type Module = {
+  id: "my-day" | "finance";
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  views: NavItem[];
+  /** Route prefixes that belong to this module. */
+  routes: string[];
+};
+
+export const modules: Module[] = [
+  {
+    id: "my-day",
+    href: "/my-day",
+    label: "My-Day",
+    icon: Sun,
+    routes: [
+      "/my-day",
+      "/important",
+      "/planned",
+      "/tasks",
+      "/routines",
+      "/completed",
+      "/lists",
+    ],
+    views: [
+      { href: "/my-day", label: "Today", icon: Sun },
+      { href: "/important", label: "Important", icon: Star },
+      { href: "/planned", label: "Planned", icon: CalendarClock },
+      { href: "/tasks", label: "Tasks", icon: ListTodo },
+      { href: "/routines", label: "Routines", icon: Repeat },
+      { href: "/completed", label: "Ticked Tasks", icon: CheckCheck },
+    ],
+  },
+  {
+    id: "finance",
+    href: "/finance",
+    label: "Financial Management",
+    icon: Landmark,
+    routes: ["/finance"],
+    views: [{ href: "/finance", label: "Overview", icon: Landmark }],
+  },
 ];
+
+export function moduleFor(pathname: string): Module | null {
+  return (
+    modules.find((item) =>
+      item.routes.some(
+        (route) => pathname === route || pathname.startsWith(`${route}/`),
+      ),
+    ) ?? null
+  );
+}
 
 export function AppShell({
   lists,
@@ -52,7 +104,9 @@ export function AppShell({
   return (
     <div className="flex min-h-dvh">
       <aside className="border-border hidden w-64 shrink-0 flex-col gap-6 border-r px-4 py-6 md:flex">
-        <BrandMark />
+        <Link href="/home" className="w-fit">
+          <BrandMark />
+        </Link>
         <Nav lists={lists} />
         <SignOutButton />
       </aside>
@@ -70,13 +124,21 @@ export function AppShell({
             <SheetContent side="left" className="w-72 gap-6 px-4 py-6">
               <SheetHeader className="p-0">
                 <SheetTitle className="sr-only">Navigation</SheetTitle>
-                <BrandMark />
+                <Link
+                  href="/home"
+                  className="w-fit"
+                  onClick={() => setOpen(false)}
+                >
+                  <BrandMark />
+                </Link>
               </SheetHeader>
               <Nav lists={lists} onNavigate={() => setOpen(false)} />
               <SignOutButton />
             </SheetContent>
           </Sheet>
-          <BrandMark size={28} />
+          <Link href="/home">
+            <BrandMark size={28} />
+          </Link>
         </header>
 
         <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 md:px-8 md:py-10">
@@ -98,6 +160,7 @@ function Nav({
   const router = useRouter();
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
+  const current = moduleFor(pathname);
 
   async function createList(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -128,57 +191,105 @@ function Nav({
   return (
     <nav className="flex flex-1 flex-col gap-6 overflow-y-auto">
       <ul className="space-y-0.5">
-        {views.map((view) => (
-          <li key={view.href}>
+        <li>
+          <NavLink
+            href="/home"
+            active={pathname === "/home"}
+            onNavigate={onNavigate}
+          >
+            <Home className="size-4 shrink-0" />
+            Home
+          </NavLink>
+        </li>
+        {modules.map((item) => (
+          <li key={item.id}>
             <NavLink
-              href={view.href}
-              active={pathname === view.href}
+              href={item.href}
+              active={current?.id === item.id}
               onNavigate={onNavigate}
             >
-              <view.icon className="size-4 shrink-0" />
-              {view.label}
+              <item.icon className="size-4 shrink-0" />
+              {item.label}
             </NavLink>
           </li>
         ))}
       </ul>
 
-      <div className="space-y-2">
-        <p className="text-muted-foreground px-2 text-xs tracking-wide uppercase">
-          Lists
-        </p>
-        <ul className="space-y-0.5">
-          {lists.map((item) => (
-            <li key={item.id}>
-              <NavLink
-                href={`/lists/${item.id}`}
-                active={pathname === `/lists/${item.id}`}
-                onNavigate={onNavigate}
-              >
-                <span className="truncate">{item.name}</span>
-              </NavLink>
-            </li>
-          ))}
-        </ul>
+      {current && current.views.length > 1 ? (
+        <div className="space-y-2">
+          <p className="text-muted-foreground px-2 text-xs tracking-wide uppercase">
+            {current.label}
+          </p>
+          <ul className="space-y-0.5">
+            {current.views.map((view) => (
+              <li key={view.href}>
+                <NavLink
+                  href={view.href}
+                  active={pathname === view.href}
+                  onNavigate={onNavigate}
+                >
+                  <view.icon className="size-4 shrink-0" />
+                  {view.label}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
 
-        <form onSubmit={createList} className="flex items-center gap-1.5 px-1">
-          <Input
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="New list"
-            aria-label="New list name"
-            maxLength={80}
-            className="h-8"
-          />
-          <Button
-            type="submit"
-            variant="ghost"
-            size="icon-sm"
-            aria-label="Create list"
-            disabled={saving || name.trim().length === 0}
+      {current?.id === "my-day" ? (
+        <div className="space-y-2">
+          <p className="text-muted-foreground px-2 text-xs tracking-wide uppercase">
+            Lists
+          </p>
+          <ul className="space-y-0.5">
+            {lists.map((item) => (
+              <li key={item.id}>
+                <NavLink
+                  href={`/lists/${item.id}`}
+                  active={pathname === `/lists/${item.id}`}
+                  onNavigate={onNavigate}
+                >
+                  <span className="truncate">{item.name}</span>
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+
+          <form
+            onSubmit={createList}
+            className="flex items-center gap-1.5 px-1"
           >
-            <Plus />
-          </Button>
-        </form>
+            <Input
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              placeholder="New list"
+              aria-label="New list name"
+              maxLength={80}
+              className="h-8"
+            />
+            <Button
+              type="submit"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Create list"
+              disabled={saving || name.trim().length === 0}
+            >
+              <Plus />
+            </Button>
+          </form>
+        </div>
+      ) : null}
+
+      <div className="mt-auto">
+        <NavLink
+          href="/settings"
+          active={pathname === "/settings"}
+          onNavigate={onNavigate}
+        >
+          <Settings className="size-4 shrink-0" />
+          Settings
+        </NavLink>
       </div>
     </nav>
   );
