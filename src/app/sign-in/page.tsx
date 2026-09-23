@@ -8,7 +8,7 @@ export default async function SignInPage() {
   const session = await getSession();
 
   if (session) {
-    redirect("/my-day");
+    redirect("/home");
   }
 
   return (
