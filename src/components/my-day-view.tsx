@@ -1,12 +1,12 @@
 "use client";
 
-import { CalendarDays, Repeat } from "lucide-react";
+import { CalendarDays, ListTodo, Plus, Repeat } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { RoutineEditor } from "@/components/routine-editor";
 import { SortableList, SortableRow } from "@/components/sortable-list";
-import { SearchField, StarButton } from "@/components/task-bits";
+import { StarButton } from "@/components/task-bits";
 import { TaskDetail } from "@/components/task-detail";
 import { useTasks, useTaskStore } from "@/components/task-store";
 import { PriorityDot, TaskRows } from "@/components/task-view";
@@ -15,7 +15,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { formatMinutes } from "@/lib/dates";
 import { playCompleteSound } from "@/lib/sound";
-import { searchMatches, taskMatches } from "@/lib/task-views";
+import { taskMatches } from "@/lib/task-views";
 import type {
   CalendarAgenda,
   CalendarEvent,
@@ -47,29 +47,27 @@ export function MyDayView({
   const tasks = useTasks(initialTasks, matches);
   const [routines, setRoutines] = useState(initialRoutines);
   const [title, setTitle] = useState("");
-  const [query, setQuery] = useState("");
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [openRoutineId, setOpenRoutineId] = useState<string | null>(null);
+  const [leaving, setLeaving] = useState<Set<string>>(() => new Set());
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const [pending, startTransition] = useTransition();
 
+  useEffect(() => {
+    const pendingTimers = timers.current;
+    return () => pendingTimers.forEach(clearTimeout);
+  }, []);
+
   const openTask = store.tasks[openTaskId ?? ""] ?? null;
-  const openRoutine = routines.find((item) => item.id === openRoutineId) ?? null;
-  const filtering = query.trim().length > 0;
-  const visibleTasks = useMemo(
-    () => tasks.filter((item) => searchMatches(item, query)),
-    [tasks, query],
-  );
-  const visibleRoutines = useMemo(
-    () => routines.filter((item) => searchMatches(item, query)),
-    [routines, query],
+  const openRoutine =
+    routines.find((item) => item.id === openRoutineId) ?? null;
+  const openRoutines = routines.filter((item) => !item.completed);
+  const visibleRoutines = routines.filter(
+    (item) => !item.completed || leaving.has(item.id),
   );
 
-  const remaining =
-    tasks.reduce(sumEstimate, 0) +
-    routines.filter((item) => !item.completed).reduce(sumEstimate, 0);
-
-  const openCount =
-    tasks.length + routines.filter((item) => !item.completed).length;
+  const openCount = tasks.length + openRoutines.length;
+  const doneToday = routines.length - openRoutines.length;
 
   function addTask(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -91,7 +89,10 @@ export function MyDayView({
     store.deleteTask(item);
   }
 
-  function patchRoutine(item: RoutineOccurrence, changes: Partial<RoutineOccurrence>) {
+  function patchRoutine(
+    item: RoutineOccurrence,
+    changes: Partial<RoutineOccurrence>,
+  ) {
     setRoutines((current) =>
       current.map((entry) =>
         entry.id === item.id ? { ...entry, ...changes } : entry,
@@ -143,6 +144,29 @@ export function MyDayView({
       ),
     );
 
+    const timer = timers.current.get(item.id);
+    if (timer) clearTimeout(timer);
+    if (completed) {
+      setLeaving((current) => new Set(current).add(item.id));
+      timers.current.set(
+        item.id,
+        setTimeout(() => {
+          timers.current.delete(item.id);
+          setLeaving((current) => {
+            const next = new Set(current);
+            next.delete(item.id);
+            return next;
+          });
+        }, 600),
+      );
+    } else {
+      setLeaving((current) => {
+        const next = new Set(current);
+        next.delete(item.id);
+        return next;
+      });
+    }
+
     startTransition(async () => {
       const response = await fetch(
         completed
@@ -165,139 +189,173 @@ export function MyDayView({
   }
 
   const empty = tasks.length === 0 && routines.length === 0;
+  const allDone = !empty && openCount === 0 && visibleRoutines.length === 0;
 
   return (
-    <div className="space-y-6">
-      <form onSubmit={addTask} className="flex gap-2">
-        <Input
-          value={title}
-          onChange={(event) => setTitle(event.target.value)}
-          placeholder="Add a task for today"
-          aria-label="Task title"
-          maxLength={200}
-        />
-        <Button type="submit" disabled={pending || title.trim().length === 0}>
-          Add
-        </Button>
-      </form>
-
+    <div className="flex min-h-[60dvh] flex-col gap-8">
       {agenda.connected && <Agenda agenda={agenda} />}
 
-      {empty ? (
-        <div className="border-border space-y-3 rounded-lg border border-dashed px-4 py-10 text-center">
-          <p className="text-muted-foreground">
-            Nothing planned for today yet.
-          </p>
-          <Button variant="outline" render={<Link href="/tasks" />}>
-            Pick from Tasks
-          </Button>
-        </div>
-      ) : (
-        <p className="text-muted-foreground text-sm">
-          {openCount === 0
-            ? "Everything on today's plan is done."
-            : `${openCount} left${remaining ? ` · about ${formatMinutes(remaining)}` : ""}`}
-        </p>
-      )}
-
-      {!empty && <SearchField value={query} onChange={setQuery} />}
-
-      {!empty && filtering && visibleTasks.length + visibleRoutines.length === 0 && (
-        <p className="text-muted-foreground px-4 py-10 text-center text-sm">
-          Nothing matches “{query.trim()}”.
-        </p>
-      )}
-
-      {visibleTasks.length > 0 && (
-        <TaskRows
-          tasks={visibleTasks}
-          sortable={!filtering}
-          onReorder={store.reorderTasks}
-          onOpen={setOpenTaskId}
-          onToggle={(item) =>
-            store.patchTask(item, { completed: true }, { completed: true })
-          }
-          onStar={(item) =>
-            store.patchTask(
-              item,
-              { important: !item.important },
-              { important: !item.important },
-            )
-          }
-          onDelete={deleteTask}
-        />
-      )}
-
-      {visibleRoutines.length > 0 && (
-        <section className="space-y-1">
-          {visibleTasks.length > 0 && (
-            <div
-              role="separator"
-              className="text-muted-foreground flex items-center gap-3 pt-2 text-xs tracking-wide uppercase"
-            >
-              <span className="bg-border h-px flex-1" />
-              <span className="inline-flex items-center gap-1.5">
-                <Repeat className="size-3" />
-                Routines
-              </span>
-              <span className="bg-border h-px flex-1" />
-            </div>
-          )}
-
-          <SortableList
-            ids={visibleRoutines.map((item) => item.id)}
-            onReorder={reorderRoutines}
-            disabled={filtering}
-          >
-            {visibleRoutines.map((item) => (
-              <SortableRow
-                key={item.id}
-                id={item.id}
-                disabled={filtering}
-                className="py-2.5"
+      <div className="flex-1 space-y-8">
+        {empty ? (
+          <div className="border-border space-y-3 rounded-lg border border-dashed px-4 py-12 text-center">
+            <p className="text-muted-foreground">
+              Nothing planned for today yet. Add a task below or pull one in.
+            </p>
+            <Button variant="outline" render={<Link href="/tasks" />}>
+              Pick from Tasks
+            </Button>
+          </div>
+        ) : allDone ? (
+          <div className="border-border space-y-1 rounded-lg border border-dashed px-4 py-12 text-center">
+            <p className="font-heading text-xl">
+              That&apos;s everything for today.
+            </p>
+            <p className="text-muted-foreground text-sm">
+              <Link
+                href="/completed"
+                className="underline-offset-4 hover:underline"
               >
-                <Checkbox
-                  checked={item.completed}
-                  onCheckedChange={() => toggleRoutine(item)}
-                  aria-label={`Mark routine "${item.title}" done today`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setOpenRoutineId(item.id)}
-                  className="min-w-0 flex-1 text-left"
+                {doneToday === 1
+                  ? "1 routine ticked"
+                  : `${doneToday} routines ticked`}
+              </Link>
+            </p>
+          </div>
+        ) : null}
+
+        {tasks.length > 0 && (
+          <section className="space-y-1">
+            <SectionHeader
+              icon={ListTodo}
+              label="Tasks"
+              detail={`${tasks.length} left${
+                tasks.reduce(sumEstimate, 0)
+                  ? ` · about ${formatMinutes(tasks.reduce(sumEstimate, 0))}`
+                  : ""
+              }`}
+            />
+            <TaskRows
+              tasks={tasks}
+              sortable
+              onReorder={store.reorderTasks}
+              onOpen={setOpenTaskId}
+              onToggle={(item) =>
+                store.patchTask(item, { completed: true }, { completed: true })
+              }
+              onStar={(item) =>
+                store.patchTask(
+                  item,
+                  { important: !item.important },
+                  { important: !item.important },
+                )
+              }
+              onDelete={deleteTask}
+            />
+          </section>
+        )}
+
+        {visibleRoutines.length > 0 && (
+          <section className="space-y-1">
+            <SectionHeader
+              icon={Repeat}
+              label="Routines"
+              detail={
+                doneToday
+                  ? `${openRoutines.length} left · ${doneToday} ticked`
+                  : `${openRoutines.length} left`
+              }
+            />
+
+            <SortableList
+              ids={visibleRoutines.map((item) => item.id)}
+              onReorder={reorderRoutines}
+            >
+              {visibleRoutines.map((item) => (
+                <SortableRow
+                  key={item.id}
+                  id={item.id}
+                  className={cn(
+                    "py-2.5 transition-opacity duration-500",
+                    item.completed && "opacity-40",
+                  )}
                 >
-                  <span
-                    className={cn(
-                      "block truncate",
-                      item.completed && "text-muted-foreground line-through",
-                    )}
+                  <Checkbox
+                    checked={item.completed}
+                    onCheckedChange={() => toggleRoutine(item)}
+                    aria-label={`Mark routine "${item.title}" done today`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setOpenRoutineId(item.id)}
+                    className="min-w-0 flex-1 text-left"
                   >
-                    {item.title}
-                  </span>
-                  <span className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-3 text-xs">
+                    <span
+                      className={cn(
+                        "block truncate",
+                        item.completed && "text-muted-foreground line-through",
+                      )}
+                    >
+                      {item.title}
+                    </span>
+                    {(item.notes || item.steps.length > 0) && (
+                      <span className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-3 text-xs">
+                        {item.steps.length > 0 && (
+                          <span>
+                            {`${item.steps.filter((step) => step.completed).length} of ${item.steps.length} steps`}
+                          </span>
+                        )}
+                        {item.notes && (
+                          <span className="truncate">{item.notes}</span>
+                        )}
+                      </span>
+                    )}
+                  </button>
+                  <span className="text-muted-foreground hidden shrink-0 items-center gap-3 text-xs tabular-nums sm:flex">
                     {item.timeOfDay && <span>{item.timeOfDay}</span>}
                     {item.estimatedMinutes && (
                       <span>{formatMinutes(item.estimatedMinutes)}</span>
                     )}
-                    {item.steps.length > 0 && (
-                      <span>
-                        {`${item.steps.filter((step) => step.completed).length} of ${item.steps.length} steps`}
-                      </span>
-                    )}
                   </span>
-                </button>
-                <PriorityDot priority={item.priority} />
-                <StarButton
-                  active={item.important}
-                  onToggle={() =>
-                    patchRoutine(item, { important: !item.important })
-                  }
-                />
-              </SortableRow>
-            ))}
-          </SortableList>
-        </section>
-      )}
+                  <PriorityDot priority={item.priority} />
+                  <StarButton
+                    active={item.important}
+                    onToggle={() =>
+                      patchRoutine(item, { important: !item.important })
+                    }
+                  />
+                </SortableRow>
+              ))}
+            </SortableList>
+          </section>
+        )}
+      </div>
+
+      <form
+        onSubmit={addTask}
+        className="bg-background/95 sticky bottom-0 -mx-4 flex items-center gap-2 border-t px-4 py-3 backdrop-blur md:static md:mx-0 md:border-0 md:p-0"
+      >
+        <div className="relative flex-1">
+          <Plus
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+            aria-hidden
+          />
+          <Input
+            value={title}
+            onChange={(event) => setTitle(event.target.value)}
+            placeholder="Add a task for today"
+            aria-label="Task title"
+            maxLength={200}
+            className="h-10 pl-9"
+          />
+        </div>
+        <Button
+          type="submit"
+          className="h-10"
+          disabled={pending || title.trim().length === 0}
+        >
+          Add
+        </Button>
+      </form>
 
       <RoutineEditor
         open={openRoutine !== null}
@@ -327,13 +385,40 @@ export function MyDayView({
   );
 }
 
+function SectionHeader({
+  icon: Icon,
+  label,
+  detail,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  detail?: string;
+}) {
+  return (
+    <h2 className="text-muted-foreground border-border flex items-center gap-1.5 border-b pb-1.5 text-xs tracking-wide uppercase">
+      <Icon className="size-3.5" />
+      {label}
+      {detail && (
+        <span className="ml-auto font-normal normal-case tracking-normal">
+          {detail}
+        </span>
+      )}
+    </h2>
+  );
+}
+
 function Agenda({ agenda }: { agenda: CalendarAgenda }) {
   return (
-    <section className="space-y-2">
-      <h2 className="text-muted-foreground flex items-center gap-1.5 text-xs tracking-wide uppercase">
-        <CalendarDays className="size-3.5" />
-        Schedule
-      </h2>
+    <section className="space-y-1">
+      <SectionHeader
+        icon={CalendarDays}
+        label="Schedule"
+        detail={
+          agenda.events.length
+            ? `${agenda.events.length} ${agenda.events.length === 1 ? "event" : "events"}`
+            : undefined
+        }
+      />
       {agenda.events.length === 0 && (
         <p className="text-muted-foreground text-sm">
           {agenda.failed

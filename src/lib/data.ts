@@ -12,7 +12,12 @@ import {
 } from "@/db/schema";
 import { toDateKey } from "@/lib/dates";
 import { describeRecurrence, occursOn } from "@/lib/routines";
-import type { ListItem, RoutineItem, RoutineOccurrence, TaskItem } from "@/lib/types";
+import type {
+  ListItem,
+  RoutineItem,
+  RoutineOccurrence,
+  TaskItem,
+} from "@/lib/types";
 
 export type TaskView = "all" | "important" | "planned" | "list" | "completed";
 
@@ -43,7 +48,9 @@ export async function getTasks(
     scope.push(isNotNull(task.dueAt));
   }
   scope.push(
-    view === "completed" ? isNotNull(task.completedAt) : isNull(task.completedAt),
+    view === "completed"
+      ? isNotNull(task.completedAt)
+      : isNull(task.completedAt),
   );
 
   const rows = await db
@@ -89,6 +96,7 @@ export function serializeTask(row: Task, steps: TaskStep[] = []): TaskItem {
       .map((step) => ({
         id: step.id,
         title: step.title,
+        notes: step.notes,
         completed: step.completedAt !== null,
       })),
   };
@@ -120,6 +128,7 @@ export function serializeRoutine(
       .map((step) => ({
         id: step.id,
         title: step.title,
+        notes: step.notes,
         completed: completedStepIds.has(step.id),
       })),
   };
@@ -143,7 +152,11 @@ export async function getRoutines(
     .select()
     .from(routine)
     .where(eq(routine.userId, userId))
-    .orderBy(asc(routine.position), asc(routine.timeOfDay), asc(routine.createdAt));
+    .orderBy(
+      asc(routine.position),
+      asc(routine.timeOfDay),
+      asc(routine.createdAt),
+    );
 
   const steps = await getRoutineSteps(rows.map((row) => row.id));
   const done = await getCompletedStepIds(steps, date);
@@ -180,7 +193,11 @@ export async function getRoutineOccurrences(
     .select()
     .from(routine)
     .where(eq(routine.userId, userId))
-    .orderBy(asc(routine.position), asc(routine.timeOfDay), asc(routine.createdAt));
+    .orderBy(
+      asc(routine.position),
+      asc(routine.timeOfDay),
+      asc(routine.createdAt),
+    );
 
   const due = rows.filter((row) => occursOn(row, date));
 
@@ -241,4 +258,32 @@ export async function getMyDayTasks(
     : [];
 
   return relevant.map((row) => serializeTask(row, steps));
+}
+
+export type CompletedRoutine = RoutineItem & {
+  /** Occurrence date the routine was ticked on. */
+  date: string;
+  completedAt: string;
+};
+
+/** Every ticked routine occurrence, newest first. */
+export async function getCompletedRoutines(
+  userId: string,
+): Promise<CompletedRoutine[]> {
+  const rows = await db
+    .select({
+      routine,
+      date: routineCompletion.date,
+      completedAt: routineCompletion.completedAt,
+    })
+    .from(routineCompletion)
+    .innerJoin(routine, eq(routine.id, routineCompletion.routineId))
+    .where(eq(routine.userId, userId))
+    .orderBy(desc(routineCompletion.date), desc(routineCompletion.completedAt));
+
+  return rows.map((row) => ({
+    ...serializeRoutine(row.routine),
+    date: row.date,
+    completedAt: row.completedAt.toISOString(),
+  }));
 }

@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
 import { today } from "@/lib/dates";
 import { describeRecurrence } from "@/lib/routines";
 import { priorities, type RoutineItem, type StepItem } from "@/lib/types";
@@ -24,6 +25,7 @@ const weekdays = [
 
 type Draft = {
   title: string;
+  notes: string;
   frequency: RoutineItem["frequency"];
   interval: number;
   byWeekday: number[];
@@ -39,6 +41,7 @@ function emptyDraft(): Draft {
   const now = new Date();
   return {
     title: "",
+    notes: "",
     frequency: "daily",
     interval: 1,
     byWeekday: [],
@@ -54,6 +57,7 @@ function emptyDraft(): Draft {
 function toDraft(routine: RoutineItem): Draft {
   return {
     title: routine.title,
+    notes: routine.notes ?? "",
     frequency: routine.frequency,
     interval: routine.interval,
     byWeekday: routine.byWeekday ?? [],
@@ -119,6 +123,7 @@ export function RoutineEditor({
 
     const body = {
       title,
+      notes: draft.notes.trim() || null,
       frequency: draft.frequency,
       interval: draft.interval,
       byWeekday:
@@ -186,6 +191,20 @@ export function RoutineEditor({
               placeholder="Morning review"
               maxLength={200}
               autoFocus={!routine}
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="routine-notes">Notes</Label>
+            <Textarea
+              id="routine-notes"
+              value={draft.notes}
+              onChange={(event) =>
+                setDraft({ ...draft, notes: event.target.value })
+              }
+              placeholder="Anything to remember"
+              maxLength={2000}
+              rows={3}
             />
           </div>
 

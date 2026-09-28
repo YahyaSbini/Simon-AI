@@ -7,6 +7,7 @@ import { requireUserId } from "@/lib/session";
 
 const updateStepSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
+  notes: z.string().trim().max(2000).nullish(),
   completed: z.boolean().optional(),
 });
 
@@ -30,7 +31,10 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   const parsed = updateStepSchema.safeParse(await request.json());
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid step update." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid step update." },
+      { status: 400 },
+    );
   }
 
   const { completed, ...fields } = parsed.data;

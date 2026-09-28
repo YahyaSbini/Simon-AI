@@ -1,21 +1,17 @@
 "use client";
 
 import { CalendarClock, Clock, Sun, Trash2 } from "lucide-react";
-import { useCallback, useMemo, useState, useTransition } from "react";
+import { useCallback, useState, useTransition } from "react";
 import { SortableList, SortableRow } from "@/components/sortable-list";
-import { OverdueDot, SearchField, StarButton } from "@/components/task-bits";
+import { OverdueDot, StarButton } from "@/components/task-bits";
+import { useOpenParam } from "@/components/use-open-param";
 import { TaskDetail } from "@/components/task-detail";
 import { useTasks, useTaskStore } from "@/components/task-store";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { formatDue, formatMinutes, today } from "@/lib/dates";
-import {
-  isOverdue,
-  searchMatches,
-  taskMatches,
-  type TaskViewKey,
-} from "@/lib/task-views";
+import { isOverdue, taskMatches, type TaskViewKey } from "@/lib/task-views";
 import type { ListItem, TaskItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -39,17 +35,11 @@ export function TaskView({
   );
   const tasks = useTasks(initialTasks, matches);
   const [title, setTitle] = useState("");
-  const [query, setQuery] = useState("");
-  const [openTaskId, setOpenTaskId] = useState<string | null>(null);
+  const [openTaskId, setOpenTaskId] = useOpenParam();
   const [pending, startTransition] = useTransition();
 
   const openTask = store.tasks[openTaskId ?? ""] ?? null;
   const completedView = view === "completed";
-  const visible = useMemo(
-    () => tasks.filter((item) => searchMatches(item, query)),
-    [tasks, query],
-  );
-  const filtering = query.trim().length > 0;
 
   function addTask(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -85,20 +75,14 @@ export function TaskView({
         </form>
       )}
 
-      {tasks.length > 0 && <SearchField value={query} onChange={setQuery} />}
-
       {tasks.length === 0 ? (
         <p className="text-muted-foreground border-border rounded-lg border border-dashed px-4 py-10 text-center">
           {emptyMessage}
         </p>
-      ) : visible.length === 0 ? (
-        <p className="text-muted-foreground px-4 py-10 text-center text-sm">
-          No tasks match “{query.trim()}”.
-        </p>
       ) : (
         <TaskRows
-          tasks={visible}
-          sortable={!completedView && !filtering}
+          tasks={tasks}
+          sortable={!completedView}
           onReorder={store.reorderTasks}
           onOpen={setOpenTaskId}
           onToggle={(item) =>
@@ -241,6 +225,13 @@ export function TaskMeta({ task }: { task: TaskItem }) {
     parts.push(
       <span key="steps">
         {doneSteps} of {steps} steps
+      </span>,
+    );
+  }
+  if (task.notes) {
+    parts.push(
+      <span key="notes" className="min-w-0 max-w-full truncate">
+        {task.notes}
       </span>,
     );
   }

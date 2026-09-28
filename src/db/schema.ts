@@ -119,6 +119,7 @@ export const taskStep = pgTable(
       .notNull()
       .references(() => task.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
+    notes: text("notes"),
     completedAt: timestamp("completed_at"),
     position: integer("position").notNull().default(0),
     createdAt: timestamp("created_at").notNull().defaultNow(),
@@ -183,6 +184,7 @@ export const routineStep = pgTable(
       .notNull()
       .references(() => routine.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
+    notes: text("notes"),
     position: integer("position").notNull().default(0),
     createdAt: timestamp("created_at").notNull().defaultNow(),
   },

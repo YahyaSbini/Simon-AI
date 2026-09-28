@@ -9,6 +9,7 @@ import { dateKey } from "@/lib/validation";
 /** `completed` applies to the given `date` only; steps reset with each occurrence. */
 const updateStepSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
+  notes: z.string().trim().max(2000).nullish(),
   completed: z.boolean().optional(),
   date: dateKey.optional(),
 });
@@ -33,10 +34,13 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   const parsed = updateStepSchema.safeParse(await request.json());
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid step update." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid step update." },
+      { status: 400 },
+    );
   }
 
-  const { completed, date, title } = parsed.data;
+  const { completed, date, title, notes } = parsed.data;
 
   if (completed !== undefined && !date) {
     return NextResponse.json(
@@ -51,15 +55,23 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     .select()
     .from(routineStep)
     .where(
-      and(eq(routineStep.id, id), inArray(routineStep.id, ownedStepIds(userId))),
+      and(
+        eq(routineStep.id, id),
+        inArray(routineStep.id, ownedStepIds(userId)),
+      ),
     );
 
   if (!step) {
     return NextResponse.json({ error: "Step not found." }, { status: 404 });
   }
 
-  if (title !== undefined) {
-    await db.update(routineStep).set({ title }).where(eq(routineStep.id, id));
+  const fields = {
+    ...(title !== undefined ? { title } : {}),
+    ...(notes !== undefined ? { notes } : {}),
+  };
+
+  if (Object.keys(fields).length) {
+    await db.update(routineStep).set(fields).where(eq(routineStep.id, id));
   }
 
   if (completed !== undefined && date) {
@@ -80,7 +92,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     }
   }
 
-  return NextResponse.json({ step: { ...step, title: title ?? step.title } });
+  return NextResponse.json({ step: { ...step, ...fields } });
 }
 
 export async function DELETE(_request: Request, { params }: RouteContext) {
@@ -95,7 +107,10 @@ export async function DELETE(_request: Request, { params }: RouteContext) {
   const [deleted] = await db
     .delete(routineStep)
     .where(
-      and(eq(routineStep.id, id), inArray(routineStep.id, ownedStepIds(userId))),
+      and(
+        eq(routineStep.id, id),
+        inArray(routineStep.id, ownedStepIds(userId)),
+      ),
     )
     .returning({ id: routineStep.id });
 
