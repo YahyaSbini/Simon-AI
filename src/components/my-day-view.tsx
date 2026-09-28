@@ -50,6 +50,7 @@ export function MyDayView({
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [openRoutineId, setOpenRoutineId] = useState<string | null>(null);
   const [leaving, setLeaving] = useState<Set<string>>(() => new Set());
+  const [tickedTasks, setTickedTasks] = useState(0);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const [pending, startTransition] = useTransition();
 
@@ -123,7 +124,11 @@ export function MyDayView({
 
   function reorderRoutines(ids: string[]) {
     const byId = new Map(routines.map((item) => [item.id, item]));
-    setRoutines(ids.map((id) => byId.get(id)!).filter(Boolean));
+    const ordered = ids.map((id) => byId.get(id)!).filter(Boolean);
+    const moved = new Set(ids);
+    setRoutines((current) =>
+      current.filter((item) => !moved.has(item.id)).concat(ordered),
+    );
 
     void fetch("/api/routines/reorder", {
       method: "PATCH",
@@ -188,7 +193,8 @@ export function MyDayView({
     });
   }
 
-  const empty = tasks.length === 0 && routines.length === 0;
+  const empty =
+    tasks.length === 0 && routines.length === 0 && tickedTasks === 0;
   const allDone = !empty && openCount === 0 && visibleRoutines.length === 0;
 
   return (
@@ -239,9 +245,10 @@ export function MyDayView({
               sortable
               onReorder={store.reorderTasks}
               onOpen={setOpenTaskId}
-              onToggle={(item) =>
-                store.patchTask(item, { completed: true }, { completed: true })
-              }
+              onToggle={(item) => {
+                setTickedTasks((count) => count + 1);
+                store.patchTask(item, { completed: true }, { completed: true });
+              }}
               onStar={(item) =>
                 store.patchTask(
                   item,
