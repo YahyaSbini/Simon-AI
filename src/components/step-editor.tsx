@@ -1,12 +1,13 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { StickyNote, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { playCompleteSound } from "@/lib/sound";
 import type { StepItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -32,6 +33,7 @@ export function StepEditor({
   inputId?: string;
 }) {
   const [draft, setDraft] = useState("");
+  const [notesOpenId, setNotesOpenId] = useState<string | null>(null);
 
   async function addStep(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -50,7 +52,10 @@ export function StepEditor({
     }
 
     const { step: created } = await response.json();
-    onChange([...steps, { id: created.id, title: created.title, completed: false }]);
+    onChange([
+      ...steps,
+      { id: created.id, title: created.title, notes: null, completed: false },
+    ]);
     setDraft("");
   }
 
@@ -98,6 +103,28 @@ export function StepEditor({
     }
   }
 
+  async function saveNotes(item: StepItem, value: string) {
+    const notes = value.trim() || null;
+    if (notes === item.notes) return;
+
+    onChange(
+      steps.map((entry) =>
+        entry.id === item.id ? { ...entry, notes } : entry,
+      ),
+    );
+
+    const response = await fetch(stepUrl(item.id), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notes }),
+    });
+
+    if (!response.ok) {
+      toast.error("Couldn't save that note.");
+      onChange(steps);
+    }
+  }
+
   async function deleteStep(item: StepItem) {
     onChange(steps.filter((entry) => entry.id !== item.id));
 
@@ -114,28 +141,70 @@ export function StepEditor({
       <Label htmlFor={inputId}>Steps</Label>
       {steps.length > 0 && (
         <ul className="space-y-1">
-          {steps.map((item) => (
-            <li key={item.id} className="group flex items-center gap-2">
-              <Checkbox
-                checked={item.completed}
-                onCheckedChange={() => toggleStep(item)}
-                aria-label={`Mark step "${item.title}" complete`}
-              />
-              <StepTitle
-                step={item}
-                onRename={(title) => renameStep(item, title)}
-              />
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`Remove step "${item.title}"`}
-                className="transition-opacity md:opacity-0 md:group-hover:opacity-100"
-                onClick={() => deleteStep(item)}
-              >
-                <Trash2 />
-              </Button>
-            </li>
-          ))}
+          {steps.map((item) => {
+            const notesOpen = notesOpenId === item.id;
+            return (
+              <li key={item.id} className="group space-y-1">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    checked={item.completed}
+                    onCheckedChange={() => toggleStep(item)}
+                    aria-label={`Mark step "${item.title}" complete`}
+                  />
+                  <StepTitle
+                    step={item}
+                    onRename={(title) => renameStep(item, title)}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={
+                      notesOpen
+                        ? `Hide notes for "${item.title}"`
+                        : `Notes for "${item.title}"`
+                    }
+                    aria-pressed={notesOpen}
+                    className={cn(
+                      "transition-opacity md:opacity-0 md:group-hover:opacity-100",
+                      (item.notes || notesOpen) && "text-azure md:opacity-100",
+                    )}
+                    onClick={() => setNotesOpenId(notesOpen ? null : item.id)}
+                  >
+                    <StickyNote />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    aria-label={`Remove step "${item.title}"`}
+                    className="transition-opacity md:opacity-0 md:group-hover:opacity-100"
+                    onClick={() => deleteStep(item)}
+                  >
+                    <Trash2 />
+                  </Button>
+                </div>
+                {notesOpen ? (
+                  <Textarea
+                    autoFocus
+                    defaultValue={item.notes ?? ""}
+                    onBlur={(event) => saveNotes(item, event.target.value)}
+                    placeholder="Notes for this step"
+                    aria-label={`Notes for step "${item.title}"`}
+                    maxLength={2000}
+                    rows={2}
+                    className="ml-6 min-h-0 text-sm"
+                  />
+                ) : item.notes ? (
+                  <button
+                    type="button"
+                    onClick={() => setNotesOpenId(item.id)}
+                    className="text-muted-foreground hover:text-foreground ml-6 block max-w-full truncate text-left text-xs transition-colors"
+                  >
+                    {item.notes}
+                  </button>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       )}
       <form onSubmit={addStep} className="flex gap-2">

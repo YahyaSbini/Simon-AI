@@ -18,6 +18,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { BrandMark } from "@/components/brand-mark";
+import { NavSearch } from "@/components/nav-search";
 import { SignOutButton } from "@/components/sign-out-button";
 import { TaskStoreProvider } from "@/components/task-store";
 import { Button } from "@/components/ui/button";
@@ -52,7 +53,7 @@ export const modules: Module[] = [
   {
     id: "my-day",
     href: "/my-day",
-    label: "My-Day",
+    label: "My Day",
     icon: Sun,
     routes: [
       "/my-day",
@@ -100,13 +101,18 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const pathname = usePathname();
+  const wide = moduleFor(pathname)?.id === "my-day";
 
   return (
     <div className="flex min-h-dvh">
       <aside className="border-border hidden w-64 shrink-0 flex-col gap-6 border-r px-4 py-6 md:flex">
-        <Link href="/home" className="w-fit">
-          <BrandMark />
-        </Link>
+        <div className="flex items-start justify-between">
+          <Link href="/home" className="w-fit">
+            <BrandMark />
+          </Link>
+          <HomeButton />
+        </div>
         <Nav lists={lists} />
         <SignOutButton />
       </aside>
@@ -122,7 +128,7 @@ export function AppShell({
               <Menu />
             </SheetTrigger>
             <SheetContent side="left" className="w-72 gap-6 px-4 py-6">
-              <SheetHeader className="p-0">
+              <SheetHeader className="flex-row items-start justify-between p-0 pr-8">
                 <SheetTitle className="sr-only">Navigation</SheetTitle>
                 <Link
                   href="/home"
@@ -131,17 +137,24 @@ export function AppShell({
                 >
                   <BrandMark />
                 </Link>
+                <HomeButton onNavigate={() => setOpen(false)} />
               </SheetHeader>
               <Nav lists={lists} onNavigate={() => setOpen(false)} />
               <SignOutButton />
             </SheetContent>
           </Sheet>
-          <Link href="/home">
+          <Link href="/home" className="flex-1">
             <BrandMark size={28} />
           </Link>
+          <HomeButton />
         </header>
 
-        <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-6 md:px-8 md:py-10">
+        <main
+          className={cn(
+            "mx-auto w-full flex-1 px-4 py-6 md:px-8 md:py-10",
+            wide ? "max-w-5xl" : "max-w-3xl",
+          )}
+        >
           <TaskStoreProvider>{children}</TaskStoreProvider>
         </main>
       </div>
@@ -190,36 +203,12 @@ function Nav({
 
   return (
     <nav className="flex flex-1 flex-col gap-6 overflow-y-auto">
-      <ul className="space-y-0.5">
-        <li>
-          <NavLink
-            href="/home"
-            active={pathname === "/home"}
-            onNavigate={onNavigate}
-          >
-            <Home className="size-4 shrink-0" />
-            Home
-          </NavLink>
-        </li>
-        {modules.map((item) => (
-          <li key={item.id}>
-            <NavLink
-              href={item.href}
-              active={current?.id === item.id}
-              onNavigate={onNavigate}
-            >
-              <item.icon className="size-4 shrink-0" />
-              {item.label}
-            </NavLink>
-          </li>
-        ))}
-      </ul>
-
-      {current && current.views.length > 1 ? (
-        <div className="space-y-2">
-          <p className="text-muted-foreground px-2 text-xs tracking-wide uppercase">
+      {current ? (
+        <div className="space-y-3">
+          <h2 className="font-heading px-2 text-2xl leading-none">
             {current.label}
-          </p>
+          </h2>
+          {current.id === "my-day" && <NavSearch onNavigate={onNavigate} />}
           <ul className="space-y-0.5">
             {current.views.map((view) => (
               <li key={view.href}>
@@ -281,7 +270,7 @@ function Nav({
         </div>
       ) : null}
 
-      <div className="mt-auto">
+      <div className={cn("mt-auto", !current && "pt-2")}>
         <NavLink
           href="/settings"
           active={pathname === "/settings"}
@@ -292,6 +281,22 @@ function Nav({
         </NavLink>
       </div>
     </nav>
+  );
+}
+
+function HomeButton({ onNavigate }: { onNavigate?: () => void }) {
+  const pathname = usePathname();
+  return (
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      aria-label="Home"
+      aria-current={pathname === "/home" ? "page" : undefined}
+      className={cn(pathname === "/home" && "bg-muted")}
+      render={<Link href="/home" onClick={onNavigate} />}
+    >
+      <Home />
+    </Button>
   );
 }
 

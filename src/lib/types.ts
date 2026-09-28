@@ -8,6 +8,7 @@ export type ListItem = {
 export type StepItem = {
   id: string;
   title: string;
+  notes: string | null;
   completed: boolean;
 };
 

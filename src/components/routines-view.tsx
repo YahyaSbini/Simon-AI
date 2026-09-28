@@ -1,15 +1,15 @@
 "use client";
 
 import { Pencil, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { RoutineEditor } from "@/components/routine-editor";
 import { SortableList, SortableRow } from "@/components/sortable-list";
-import { SearchField, StarButton } from "@/components/task-bits";
+import { StarButton } from "@/components/task-bits";
+import { useOpenParam } from "@/components/use-open-param";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatMinutes } from "@/lib/dates";
-import { searchMatches } from "@/lib/task-views";
 import { priorityLabels, type RoutineItem, type StepItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -23,14 +23,18 @@ export function RoutinesView({
   const [routines, setRoutines] = useState(initialRoutines);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [query, setQuery] = useState("");
+  const [requestedId, setRequestedId] = useOpenParam();
+
+  useEffect(() => {
+    if (!requestedId) return;
+    if (routines.some((item) => item.id === requestedId)) {
+      setEditingId(requestedId);
+      setSheetOpen(true);
+    }
+    setRequestedId(null);
+  }, [requestedId, routines, setRequestedId]);
 
   const editing = routines.find((item) => item.id === editingId) ?? null;
-  const visible = useMemo(
-    () => routines.filter((item) => searchMatches(item, query)),
-    [routines, query],
-  );
-  const filtering = query.trim().length > 0;
 
   function openNew() {
     setEditingId(null);
@@ -65,7 +69,9 @@ export function RoutinesView({
 
   function setSteps(routineId: string, steps: StepItem[]) {
     setRoutines((current) =>
-      current.map((item) => (item.id === routineId ? { ...item, steps } : item)),
+      current.map((item) =>
+        item.id === routineId ? { ...item, steps } : item,
+      ),
     );
   }
 
@@ -97,42 +103,18 @@ export function RoutinesView({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <Button onClick={openNew} className="sm:order-2">
-          New routine
-        </Button>
-        {routines.length > 0 && (
-          <div className="flex-1 sm:order-1">
-            <SearchField
-              value={query}
-              onChange={setQuery}
-              placeholder="Search routines"
-            />
-          </div>
-        )}
+      <div className="flex justify-end">
+        <Button onClick={openNew}>New routine</Button>
       </div>
 
       {routines.length === 0 ? (
         <p className="text-muted-foreground border-border rounded-lg border border-dashed px-4 py-10 text-center">
           No routines yet. Add the things you repeat daily or weekly.
         </p>
-      ) : visible.length === 0 ? (
-        <p className="text-muted-foreground px-4 py-10 text-center text-sm">
-          No routines match “{query.trim()}”.
-        </p>
       ) : (
-        <SortableList
-          ids={visible.map((item) => item.id)}
-          onReorder={reorder}
-          disabled={filtering}
-        >
-          {visible.map((routine) => (
-            <SortableRow
-              key={routine.id}
-              id={routine.id}
-              disabled={filtering}
-              className="py-3"
-            >
+        <SortableList ids={routines.map((item) => item.id)} onReorder={reorder}>
+          {routines.map((routine) => (
+            <SortableRow key={routine.id} id={routine.id} className="py-3">
               <Checkbox
                 checked={routine.active}
                 onCheckedChange={() =>
