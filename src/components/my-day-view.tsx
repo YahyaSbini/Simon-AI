@@ -52,6 +52,7 @@ export function MyDayView({
   const [leaving, setLeaving] = useState<Set<string>>(() => new Set());
   const [tickedTasks, setTickedTasks] = useState(0);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const inflight = useRef(new Map<string, Promise<void>>());
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -172,7 +173,8 @@ export function MyDayView({
       });
     }
 
-    startTransition(async () => {
+    const previous = inflight.current.get(item.id) ?? Promise.resolve();
+    const request = previous.then(async () => {
       const response = await fetch(
         completed
           ? `/api/routines/${item.id}/completion`
@@ -189,6 +191,13 @@ export function MyDayView({
         setRoutines((current) =>
           current.map((entry) => (entry.id === item.id ? item : entry)),
         );
+      }
+    });
+    inflight.current.set(item.id, request);
+    startTransition(async () => {
+      await request;
+      if (inflight.current.get(item.id) === request) {
+        inflight.current.delete(item.id);
       }
     });
   }
