@@ -53,11 +53,11 @@ export function CompletedRoutines({
         <span className="bg-border h-px flex-1" />
       </div>
 
-      <ul className="divide-border divide-y">
+      <ul>
         {items.map((item) => (
           <li
             key={`${item.id}-${item.date}`}
-            className="flex items-center gap-3 py-2.5"
+            className="hover:bg-muted/50 -mx-2 flex items-center gap-3 rounded-md px-2 py-2.5 transition-colors duration-150"
           >
             <Checkbox
               checked

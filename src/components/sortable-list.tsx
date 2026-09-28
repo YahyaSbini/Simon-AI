@@ -46,7 +46,9 @@ export function SortableList({
   const id = useId();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
   function handleDragEnd({ active, over }: DragEndEvent) {
@@ -70,7 +72,7 @@ export function SortableList({
         strategy={verticalListSortingStrategy}
         disabled={disabled}
       >
-        <ul className={cn("divide-border divide-y", className)}>{children}</ul>
+        <ul className={cn("flex flex-col", className)}>{children}</ul>
       </SortableContext>
     </DndContext>
   );
@@ -102,8 +104,8 @@ export function SortableRow({
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={cn(
-        "group/row bg-background relative flex items-center gap-1",
-        isDragging && "z-10 shadow-sm",
+        "group/row bg-background hover:bg-muted/50 focus-within:bg-muted/50 relative -mx-2 flex items-center gap-1 rounded-md px-2 transition-colors duration-150",
+        isDragging && "bg-muted z-10 shadow-sm",
         className,
       )}
     >
