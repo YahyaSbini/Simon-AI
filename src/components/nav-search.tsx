@@ -38,6 +38,7 @@ export function NavSearch({ onNavigate }: { onNavigate?: () => void }) {
     }
 
     const controller = new AbortController();
+    setResults(empty);
     setLoading(true);
     const timer = setTimeout(async () => {
       try {
