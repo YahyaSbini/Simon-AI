@@ -183,16 +183,18 @@ export function StepEditor({
                   </Button>
                 </div>
                 {notesOpen ? (
-                  <Textarea
-                    autoFocus
-                    defaultValue={item.notes ?? ""}
-                    onBlur={(event) => saveNotes(item, event.target.value)}
-                    placeholder="Notes for this step"
-                    aria-label={`Notes for step "${item.title}"`}
-                    maxLength={2000}
-                    rows={2}
-                    className="ml-6 min-h-0 text-sm"
-                  />
+                  <div className="pl-6">
+                    <Textarea
+                      autoFocus
+                      defaultValue={item.notes ?? ""}
+                      onBlur={(event) => saveNotes(item, event.target.value)}
+                      placeholder="Notes for this step"
+                      aria-label={`Notes for step "${item.title}"`}
+                      maxLength={2000}
+                      rows={2}
+                      className="min-h-0 text-sm"
+                    />
+                  </div>
                 ) : item.notes ? (
                   <button
                     type="button"

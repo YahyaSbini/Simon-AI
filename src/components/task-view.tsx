@@ -3,7 +3,7 @@
 import { CalendarClock, Clock, Sun, Trash2 } from "lucide-react";
 import { useCallback, useState, useTransition } from "react";
 import { SortableList, SortableRow } from "@/components/sortable-list";
-import { OverdueDot, StarButton } from "@/components/task-bits";
+import { RowTrail } from "@/components/task-bits";
 import { useOpenParam } from "@/components/use-open-param";
 import { TaskDetail } from "@/components/task-detail";
 import { useTasks, useTaskStore } from "@/components/task-store";
@@ -160,28 +160,34 @@ export function TaskRows({
             onClick={() => onOpen(item.id)}
             className="min-w-0 flex-1 text-left"
           >
-            <span className="flex items-center gap-2">
-              {isOverdue(item) && <OverdueDot />}
-              <span
-                className={cn(
-                  "block truncate transition-colors",
-                  item.completed && "text-muted-foreground line-through",
-                )}
-              >
-                {item.title}
-              </span>
+            <span
+              className={cn(
+                "block truncate transition-colors",
+                item.completed && "text-muted-foreground line-through",
+              )}
+            >
+              {item.title}
             </span>
             <TaskMeta task={item} />
           </button>
 
-          <PriorityDot priority={item.priority} />
-          <StarButton active={item.important} onToggle={() => onStar(item)} />
+          <RowTrail
+            time={
+              item.estimatedMinutes
+                ? formatMinutes(item.estimatedMinutes)
+                : null
+            }
+            priority={item.priority}
+            overdue={isOverdue(item)}
+            important={item.important}
+            onStar={() => onStar(item)}
+          />
 
           <Button
             variant="ghost"
             size="icon"
             aria-label={`Delete "${item.title}"`}
-            className="transition-opacity md:opacity-0 md:group-hover/row:opacity-100 md:group-focus-within/row:opacity-100"
+            className="size-8 transition-opacity md:opacity-0 md:group-hover/row:opacity-100 md:group-focus-within/row:opacity-100"
             onClick={() => onDelete(item)}
           >
             <Trash2 />
@@ -215,7 +221,7 @@ export function TaskMeta({ task }: { task: TaskItem }) {
   }
   if (task.estimatedMinutes) {
     parts.push(
-      <span key="estimate" className="inline-flex items-center gap-1">
+      <span key="estimate" className="inline-flex items-center gap-1 sm:hidden">
         <Clock className="size-3" />
         {formatMinutes(task.estimatedMinutes)}
       </span>,
@@ -242,22 +248,5 @@ export function TaskMeta({ task }: { task: TaskItem }) {
     <span className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
       {parts}
     </span>
-  );
-}
-
-export function PriorityDot({ priority }: { priority: TaskItem["priority"] }) {
-  if (priority === "none") return null;
-
-  return (
-    <span
-      aria-label={`${priority} priority`}
-      title={`${priority} priority`}
-      className={cn(
-        "size-2 shrink-0 rounded-full",
-        priority === "high" && "bg-azure",
-        priority === "medium" && "bg-wood",
-        priority === "low" && "bg-muted-foreground/40",
-      )}
-    />
   );
 }

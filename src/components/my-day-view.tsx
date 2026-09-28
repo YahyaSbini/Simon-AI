@@ -6,10 +6,10 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { RoutineEditor } from "@/components/routine-editor";
 import { SortableList, SortableRow } from "@/components/sortable-list";
-import { StarButton } from "@/components/task-bits";
+import { RowTrail } from "@/components/task-bits";
 import { TaskDetail } from "@/components/task-detail";
 import { useTasks, useTaskStore } from "@/components/task-store";
-import { PriorityDot, TaskRows } from "@/components/task-view";
+import { TaskRows } from "@/components/task-view";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -207,10 +207,10 @@ export function MyDayView({
   const allDone = !empty && openCount === 0 && visibleRoutines.length === 0;
 
   return (
-    <div className="flex min-h-[60dvh] flex-col gap-8">
+    <div className="flex flex-col gap-10 pb-24">
       {agenda.connected && <Agenda agenda={agenda} />}
 
-      <div className="flex-1 space-y-8">
+      <div className="space-y-10">
         {empty ? (
           <div className="border-border space-y-3 rounded-lg border border-dashed px-4 py-12 text-center">
             <p className="text-muted-foreground">
@@ -313,8 +313,14 @@ export function MyDayView({
                     >
                       {item.title}
                     </span>
-                    {(item.notes || item.steps.length > 0) && (
+                    {(item.notes ||
+                      item.steps.length > 0 ||
+                      item.timeOfDay ||
+                      item.estimatedMinutes) && (
                       <span className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-3 text-xs">
+                        {routineTime(item) && (
+                          <span className="sm:hidden">{routineTime(item)}</span>
+                        )}
                         {item.steps.length > 0 && (
                           <span>
                             {`${item.steps.filter((step) => step.completed).length} of ${item.steps.length} steps`}
@@ -326,19 +332,15 @@ export function MyDayView({
                       </span>
                     )}
                   </button>
-                  <span className="text-muted-foreground hidden shrink-0 items-center gap-3 text-xs tabular-nums sm:flex">
-                    {item.timeOfDay && <span>{item.timeOfDay}</span>}
-                    {item.estimatedMinutes && (
-                      <span>{formatMinutes(item.estimatedMinutes)}</span>
-                    )}
-                  </span>
-                  <PriorityDot priority={item.priority} />
-                  <StarButton
-                    active={item.important}
-                    onToggle={() =>
+                  <RowTrail
+                    time={routineTime(item)}
+                    priority={item.priority}
+                    important={item.important}
+                    onStar={() =>
                       patchRoutine(item, { important: !item.important })
                     }
                   />
+                  <span className="size-8 shrink-0" aria-hidden />
                 </SortableRow>
               ))}
             </SortableList>
@@ -348,29 +350,31 @@ export function MyDayView({
 
       <form
         onSubmit={addTask}
-        className="bg-background/95 sticky bottom-0 -mx-4 flex items-center gap-2 border-t px-4 py-3 backdrop-blur md:static md:mx-0 md:border-0 md:p-0"
+        className="bg-background/95 border-border fixed inset-x-0 bottom-0 z-20 border-t backdrop-blur md:left-64"
       >
-        <div className="relative flex-1">
-          <Plus
-            className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
-            aria-hidden
-          />
-          <Input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder="Add a task for today"
-            aria-label="Task title"
-            maxLength={200}
-            className="h-10 pl-9"
-          />
+        <div className="mx-auto flex w-full max-w-5xl items-center gap-2 px-4 py-3 md:px-8">
+          <div className="relative flex-1">
+            <Plus
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
+              aria-hidden
+            />
+            <Input
+              value={title}
+              onChange={(event) => setTitle(event.target.value)}
+              placeholder="Add a task for today"
+              aria-label="Task title"
+              maxLength={200}
+              className="h-10 pl-9"
+            />
+          </div>
+          <Button
+            type="submit"
+            className="h-10"
+            disabled={pending || title.trim().length === 0}
+          >
+            Add
+          </Button>
         </div>
-        <Button
-          type="submit"
-          className="h-10"
-          disabled={pending || title.trim().length === 0}
-        >
-          Add
-        </Button>
       </form>
 
       <RoutineEditor
@@ -411,7 +415,7 @@ function SectionHeader({
   detail?: string;
 }) {
   return (
-    <h2 className="text-muted-foreground border-border flex items-center gap-1.5 border-b pb-1.5 text-xs tracking-wide uppercase">
+    <h2 className="text-muted-foreground border-border mb-2 flex items-center gap-1.5 border-b pb-2 text-xs tracking-wide uppercase">
       <Icon className="size-3.5" />
       {label}
       {detail && (
@@ -442,9 +446,12 @@ function Agenda({ agenda }: { agenda: CalendarAgenda }) {
             : "No meetings today."}
         </p>
       )}
-      <ul className="divide-border divide-y">
+      <ul>
         {agenda.events.map((event) => (
-          <li key={event.id} className="flex items-baseline gap-3 py-2">
+          <li
+            key={event.id}
+            className="hover:bg-muted/50 -mx-2 flex items-baseline gap-3 rounded-md px-2 py-2 transition-colors duration-150"
+          >
             <span className="text-muted-foreground w-16 shrink-0 text-xs tabular-nums">
               {formatEventTime(event)}
             </span>
@@ -470,6 +477,14 @@ function formatEventTime(event: CalendarEvent): string {
     hour: "numeric",
     minute: "2-digit",
   });
+}
+
+function routineTime(item: RoutineOccurrence): string | null {
+  const parts = [
+    item.timeOfDay,
+    item.estimatedMinutes ? formatMinutes(item.estimatedMinutes) : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
 }
 
 function sumEstimate(
