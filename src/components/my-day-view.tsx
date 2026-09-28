@@ -175,18 +175,24 @@ export function MyDayView({
 
     const previous = inflight.current.get(item.id) ?? Promise.resolve();
     const request = previous.then(async () => {
-      const response = await fetch(
-        completed
-          ? `/api/routines/${item.id}/completion`
-          : `/api/routines/${item.id}/completion?date=${date}`,
-        {
-          method: completed ? "POST" : "DELETE",
-          headers: { "Content-Type": "application/json" },
-          ...(completed ? { body: JSON.stringify({ date }) } : {}),
-        },
-      );
+      let ok = false;
+      try {
+        const response = await fetch(
+          completed
+            ? `/api/routines/${item.id}/completion`
+            : `/api/routines/${item.id}/completion?date=${date}`,
+          {
+            method: completed ? "POST" : "DELETE",
+            headers: { "Content-Type": "application/json" },
+            ...(completed ? { body: JSON.stringify({ date }) } : {}),
+          },
+        );
+        ok = response.ok;
+      } catch {
+        ok = false;
+      }
 
-      if (!response.ok) {
+      if (!ok && inflight.current.get(item.id) === request) {
         toast.error("Couldn't update that routine.");
         setRoutines((current) =>
           current.map((entry) => (entry.id === item.id ? item : entry)),
