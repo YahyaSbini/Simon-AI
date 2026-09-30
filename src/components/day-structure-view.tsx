@@ -27,8 +27,20 @@ const colorClass: Record<Color, string> = {
   slate: "bg-chart-5",
 };
 
+const segmentText: Record<Color, string> = {
+  azure: "text-white",
+  wood: "text-white",
+  sage: "text-white dark:text-ink",
+  clay: "text-white dark:text-ink",
+  slate: "text-white dark:text-ink",
+};
+
+function asColor(color: string | null): Color {
+  return color && color in colorClass ? (color as Color) : "azure";
+}
+
 function swatch(color: string | null): string {
-  return colorClass[(color ?? "azure") as Color] ?? colorClass.azure;
+  return colorClass[asColor(color)];
 }
 
 type Draft = { start: string; end: string; label: string; color: Color };
@@ -173,7 +185,7 @@ export function DayStructureView({
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-muted-foreground text-xs tracking-wide uppercase">
-            Days
+            Week
           </p>
           <div className="flex gap-1">
             {(
@@ -199,39 +211,16 @@ export function DayStructureView({
             ))}
           </div>
         </div>
-        <div className="grid grid-cols-7 gap-1.5">
-          {weekdays.map((day) => {
-            const selected = days.includes(day.value);
-            const count = blocksOn(blocks, day.value).length;
-            return (
-              <button
-                key={day.value}
-                type="button"
-                aria-pressed={selected}
-                aria-label={day.label}
-                onClick={() => toggleDay(day.value)}
-                className={cn(
-                  "border-border focus-visible:ring-ring flex min-h-14 flex-col items-center justify-center gap-0.5 rounded-lg border py-2 text-sm transition-colors outline-none focus-visible:ring-2",
-                  selected
-                    ? "border-wood/60 bg-card text-foreground"
-                    : "text-muted-foreground hover:bg-muted/50",
-                )}
-              >
-                <span
-                  className={cn(
-                    "font-medium",
-                    day.value === today && "text-azure",
-                  )}
-                >
-                  {day.short}
-                </span>
-                <span className="text-muted-foreground text-[11px] tabular-nums">
-                  {count ? `${count} block${count === 1 ? "" : "s"}` : "–"}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <WeekGrid
+          blocks={blocks}
+          selected={days}
+          today={today}
+          onToggleDay={toggleDay}
+          onPickBlock={(day, block) => {
+            setDays([day]);
+            setEditingId(block.id);
+          }}
+        />
       </section>
 
       <section className="space-y-3">
@@ -272,8 +261,6 @@ export function DayStructureView({
           />
         )}
 
-        <Timeline blocks={visible} />
-
         {visible.length === 0 ? (
           <p className="text-muted-foreground py-6 text-center text-sm">
             No blocks yet for {days.length === 1 ? "this day" : "these days"}.
@@ -300,7 +287,7 @@ export function DayStructureView({
                       start: slot.block.start,
                       end: slot.block.end,
                       label: slot.block.label,
-                      color: (slot.block.color ?? "azure") as Color,
+                      color: asColor(slot.block.color),
                     }}
                     submitLabel="Save"
                     onCancel={() => setEditingId(null)}
@@ -594,33 +581,110 @@ function CopyPicker({
   );
 }
 
-function Timeline({ blocks }: { blocks: DayBlockItem[] }) {
+function segmentsOf(block: DayBlockItem): [number, number][] {
+  const start = toMinutes(block.start);
+  const duration = durationOf(block);
+  return start + duration > 1440
+    ? [
+        [start, 1440 - start],
+        [0, start + duration - 1440],
+      ]
+    : [[start, duration]];
+}
+
+function WeekGrid({
+  blocks,
+  selected,
+  today,
+  onToggleDay,
+  onPickBlock,
+}: {
+  blocks: DayBlockItem[];
+  selected: number[];
+  today: number;
+  onToggleDay: (day: number) => void;
+  onPickBlock: (day: number, block: DayBlockItem) => void;
+}) {
   return (
-    <div
-      className="bg-muted relative h-2.5 w-full overflow-hidden rounded-full"
-      aria-hidden
-    >
-      {blocks.map((block) => {
-        const start = toMinutes(block.start);
-        const duration = durationOf(block);
-        const segments =
-          start + duration > 1440
-            ? [
-                [start, 1440 - start],
-                [0, start + duration - 1440],
-              ]
-            : [[start, duration]];
-        return segments.map(([from, length], index) => (
-          <span
-            key={`${block.id}-${index}`}
-            className={cn("absolute inset-y-0 opacity-80", swatch(block.color))}
-            style={{
-              left: `${(from / 1440) * 100}%`,
-              width: `${(length / 1440) * 100}%`,
-            }}
-          />
-        ));
-      })}
+    <div className="space-y-1.5">
+      <ul className="flex flex-col gap-1.5">
+        {weekdays.map((day) => {
+          const active = selected.includes(day.value);
+          const dayBlocks = blocksOn(blocks, day.value);
+          return (
+            <li key={day.value} className="flex items-stretch gap-2">
+              <button
+                type="button"
+                aria-pressed={active}
+                aria-label={day.label}
+                onClick={() => onToggleDay(day.value)}
+                className={cn(
+                  "border-border focus-visible:ring-ring w-14 shrink-0 rounded-md border text-sm transition-colors outline-none focus-visible:ring-2 sm:w-16",
+                  active
+                    ? "border-wood/60 bg-card text-foreground"
+                    : "text-muted-foreground hover:bg-muted/50",
+                  day.value === today && "font-medium",
+                )}
+              >
+                {day.short}
+                {day.value === today && (
+                  <span
+                    className="bg-azure ml-1 inline-block size-1.5 rounded-full align-middle"
+                    aria-hidden
+                  />
+                )}
+              </button>
+              <div
+                className={cn(
+                  "bg-muted/60 relative h-10 min-w-0 flex-1 overflow-hidden rounded-md transition-colors",
+                  active && "bg-muted",
+                )}
+              >
+                {dayBlocks.length === 0 && (
+                  <span className="text-muted-foreground absolute inset-0 flex items-center px-3 text-xs">
+                    –
+                  </span>
+                )}
+                {dayBlocks.map((block) =>
+                  segmentsOf(block).map(([from, length], index) => (
+                    <button
+                      key={`${block.id}-${index}`}
+                      type="button"
+                      title={`${block.label} · ${block.start} – ${block.end}`}
+                      aria-label={`${block.label}, ${block.start} to ${block.end}`}
+                      onClick={() => onPickBlock(day.value, block)}
+                      className={cn(
+                        "focus-visible:ring-ring absolute inset-y-0.5 flex items-center overflow-hidden rounded px-1.5 text-xs whitespace-nowrap outline-none hover:brightness-110 focus-visible:ring-2",
+                        swatch(block.color),
+                        segmentText[asColor(block.color)],
+                      )}
+                      style={{
+                        left: `${(from / 1440) * 100}%`,
+                        width: `calc(${(length / 1440) * 100}% - 2px)`,
+                      }}
+                    >
+                      <span className="truncate">
+                        {index === 0 || length >= 120 ? block.label : ""}
+                      </span>
+                    </button>
+                  )),
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+      <div
+        className="text-muted-foreground flex pl-16 text-[11px] tabular-nums sm:pl-18"
+        aria-hidden
+      >
+        {[0, 6, 12, 18].map((hour) => (
+          <span key={hour} className="flex-1">
+            {String(hour).padStart(2, "0")}:00
+          </span>
+        ))}
+        <span>24:00</span>
+      </div>
     </div>
   );
 }
