@@ -2,7 +2,9 @@
 
 import {
   CalendarClock,
+  CalendarRange,
   CheckCheck,
+  Clock,
   Home,
   Landmark,
   ListTodo,
@@ -40,7 +42,7 @@ type NavItem = {
 };
 
 type Module = {
-  id: "my-day" | "finance";
+  id: "my-day" | "finance" | "time";
   href: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
@@ -81,6 +83,20 @@ export const modules: Module[] = [
     routes: ["/finance"],
     views: [{ href: "/finance", label: "Overview", icon: Landmark }],
   },
+  {
+    id: "time",
+    href: "/time/day-structure",
+    label: "Time Management",
+    icon: Clock,
+    routes: ["/time"],
+    views: [
+      {
+        href: "/time/day-structure",
+        label: "Day Structure",
+        icon: CalendarRange,
+      },
+    ],
+  },
 ];
 
 export function moduleFor(pathname: string): Module | null {
@@ -102,7 +118,8 @@ export function AppShell({
 }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
-  const wide = moduleFor(pathname)?.id === "my-day";
+  const moduleId = moduleFor(pathname)?.id;
+  const wide = moduleId === "my-day" || moduleId === "time";
 
   return (
     <div className="flex min-h-dvh">

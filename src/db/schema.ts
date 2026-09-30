@@ -207,7 +207,29 @@ export const routineStepCompletion = pgTable(
   ],
 );
 
+/** A block of the user's standard week: "10:00–11:00 Work" on the given weekdays. */
+export const dayBlock = pgTable(
+  "day_block",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** ISO weekdays (1 = Monday) this block applies to. */
+    weekdays: integer("weekdays").array().notNull(),
+    /** Local time as HH:MM; `end` before `start` means the block runs overnight. */
+    start: text("start").notNull(),
+    end: text("end").notNull(),
+    label: text("label").notNull(),
+    color: text("color"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("day_block_user_id_idx").on(t.userId)],
+);
+
 export type List = typeof list.$inferSelect;
+export type DayBlock = typeof dayBlock.$inferSelect;
 export type Task = typeof task.$inferSelect;
 export type TaskStep = typeof taskStep.$inferSelect;
 export type Routine = typeof routine.$inferSelect;

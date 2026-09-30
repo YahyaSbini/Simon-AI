@@ -10,7 +10,9 @@ export const dateKey = z
 
 export const timestamp = z.coerce
   .date()
-  .refine((value) => value.getFullYear() >= 1900 && value.getFullYear() <= 2999);
+  .refine(
+    (value) => value.getFullYear() >= 1900 && value.getFullYear() <= 2999,
+  );
 
 export const routineInput = z.object({
   title: z.string().trim().min(1).max(200),
@@ -38,6 +40,22 @@ export function validDateRange(range: {
 }): boolean {
   return !range.endDate || range.endDate >= range.startDate;
 }
+
+export const dayBlockColors = [
+  "azure",
+  "wood",
+  "sage",
+  "clay",
+  "slate",
+] as const;
+
+export const dayBlockInput = z.object({
+  weekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7),
+  start: z.string().regex(/^\d{2}:\d{2}$/),
+  end: z.string().regex(/^\d{2}:\d{2}$/),
+  label: z.string().trim().min(1).max(80),
+  color: z.enum(dayBlockColors).nullish(),
+});
 
 export const reorderInput = z.object({
   ids: z.array(z.string().uuid()).min(1).max(500),

@@ -1,8 +1,9 @@
-import { ArrowRight, Landmark, Sun } from "lucide-react";
+import { ArrowRight, Clock, Landmark, Sun } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { formatDay } from "@/lib/dates";
-import { getMyDayTasks, getRoutineOccurrences } from "@/lib/data";
+import { getDayBlocks, getMyDayTasks, getRoutineOccurrences } from "@/lib/data";
+import { blocksOn, isoWeekday } from "@/lib/day-structure";
 import { getSession } from "@/lib/session";
 import { getTimeZone, todayIn } from "@/lib/timezone";
 
@@ -15,10 +16,12 @@ export default async function HomePage() {
 
   const timeZone = await getTimeZone();
   const date = todayIn(timeZone);
-  const [tasks, routines] = await Promise.all([
+  const [tasks, routines, blocks] = await Promise.all([
     getMyDayTasks(session.user.id, date),
     getRoutineOccurrences(session.user.id, date),
+    getDayBlocks(session.user.id),
   ]);
+  const todayBlocks = blocksOn(blocks, isoWeekday(date)).length;
 
   const openRoutines = routines.filter((item) => !item.completed).length;
   const firstName = session.user.name?.split(" ")[0];
@@ -32,7 +35,7 @@ export default async function HomePage() {
         <p className="text-muted-foreground">{formatDay(date)}</p>
       </header>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <ModuleCard
           href="/my-day"
           title="My Day"
@@ -44,6 +47,16 @@ export default async function HomePage() {
           title="Financial Management"
           icon={Landmark}
           summary="Track spending, budgets and accounts."
+        />
+        <ModuleCard
+          href="/time/day-structure"
+          title="Time Management"
+          icon={Clock}
+          summary={
+            todayBlocks
+              ? `${todayBlocks} ${todayBlocks === 1 ? "block" : "blocks"} in today's structure.`
+              : "Shape a standard week, one day at a time."
+          }
         />
       </div>
     </div>
