@@ -1,7 +1,14 @@
 import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@/db";
-import type { Routine, RoutineStep, Task, TaskStep } from "@/db/schema";
+import type {
+  DayBlock,
+  Routine,
+  RoutineStep,
+  Task,
+  TaskStep,
+} from "@/db/schema";
 import {
+  dayBlock,
   list,
   routine,
   routineCompletion,
@@ -13,6 +20,7 @@ import {
 import { toDateKey } from "@/lib/dates";
 import { describeRecurrence, occursOn } from "@/lib/routines";
 import type {
+  DayBlockItem,
   ListItem,
   RoutineItem,
   RoutineOccurrence,
@@ -258,6 +266,27 @@ export async function getMyDayTasks(
     : [];
 
   return relevant.map((row) => serializeTask(row, steps));
+}
+
+export function serializeDayBlock(row: DayBlock): DayBlockItem {
+  return {
+    id: row.id,
+    weekdays: row.weekdays,
+    start: row.start,
+    end: row.end,
+    label: row.label,
+    color: row.color,
+  };
+}
+
+export async function getDayBlocks(userId: string): Promise<DayBlockItem[]> {
+  const rows = await db
+    .select()
+    .from(dayBlock)
+    .where(eq(dayBlock.userId, userId))
+    .orderBy(asc(dayBlock.start), asc(dayBlock.createdAt));
+
+  return rows.map(serializeDayBlock);
 }
 
 export type CompletedRoutine = RoutineItem & {

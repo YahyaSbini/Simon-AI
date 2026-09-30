@@ -5,6 +5,15 @@ export type ListItem = {
   name: string;
 };
 
+export type DayBlockItem = {
+  id: string;
+  weekdays: number[];
+  start: string;
+  end: string;
+  label: string;
+  color: string | null;
+};
+
 export type StepItem = {
   id: string;
   title: string;
