@@ -22,17 +22,15 @@ type Draft = { name: string; target: string; targetDate: string };
 
 export function SavingsView({
   today,
-  currency,
   initialGoals,
 }: {
   today: string;
-  currency: string;
   initialGoals: SavingsGoalItem[];
 }) {
   const [goals, setGoals] = useState(initialGoals);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const money = (cents: number) => formatMoney(cents, currency);
+  const money = (cents: number) => formatMoney(cents);
   const saved = goals.reduce((sum, goal) => sum + goal.savedCents, 0);
 
   function toPayload(draft: Draft) {

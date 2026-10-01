@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { CategoriesView } from "@/components/finance/categories-view";
 import { FinanceHeader } from "@/components/finance/finance-bits";
-import { getCategories, getCurrency } from "@/lib/finance";
+import { ensureFinanceSetup, getCategories } from "@/lib/finance";
 import { getSession } from "@/lib/session";
 
 export default async function CategoriesPage() {
@@ -11,7 +11,7 @@ export default async function CategoriesPage() {
     redirect("/sign-in");
   }
 
-  await getCurrency(session.user.id);
+  await ensureFinanceSetup(session.user.id);
   const categories = await getCategories(session.user.id);
 
   return (

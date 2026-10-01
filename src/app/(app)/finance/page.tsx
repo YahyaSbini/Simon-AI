@@ -34,7 +34,6 @@ export default async function FinancePage({
         key={month}
         month={month}
         today={today}
-        currency={data.currency}
         categories={data.categories}
         budget={data.budget}
         initialEntries={data.entries}
