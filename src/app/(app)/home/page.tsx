@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { formatDay } from "@/lib/dates";
 import { getDayBlocks, getMyDayTasks, getRoutineOccurrences } from "@/lib/data";
 import { blocksOn, isoWeekday } from "@/lib/day-structure";
+import { getCurrency, getMonthEntries, postDueBills } from "@/lib/finance";
+import { formatMoney, monthOf } from "@/lib/money";
 import { getSession } from "@/lib/session";
 import { getTimeZone, todayIn } from "@/lib/timezone";
 
@@ -16,10 +18,11 @@ export default async function HomePage() {
 
   const timeZone = await getTimeZone();
   const date = todayIn(timeZone);
-  const [tasks, routines, blocks] = await Promise.all([
+  const [tasks, routines, blocks, money] = await Promise.all([
     getMyDayTasks(session.user.id, date),
     getRoutineOccurrences(session.user.id, date),
     getDayBlocks(session.user.id),
+    summarizeMoney(session.user.id, date),
   ]);
   const todayBlocks = blocksOn(blocks, isoWeekday(date)).length;
 
@@ -46,7 +49,7 @@ export default async function HomePage() {
           href="/finance"
           title="Financial Management"
           icon={Landmark}
-          summary="Track spending, budgets and accounts."
+          summary={money}
         />
         <ModuleCard
           href="/time/day-structure"
@@ -61,6 +64,24 @@ export default async function HomePage() {
       </div>
     </div>
   );
+}
+
+async function summarizeMoney(userId: string, date: string): Promise<string> {
+  const currency = await getCurrency(userId);
+  await postDueBills(userId, date);
+  const entries = await getMonthEntries(userId, monthOf(date));
+
+  if (!entries.length) return "Log income and expenses, set a monthly budget.";
+
+  const left = entries.reduce(
+    (sum, entry) =>
+      sum + (entry.kind === "income" ? entry.amountCents : -entry.amountCents),
+    0,
+  );
+
+  return left >= 0
+    ? `${formatMoney(left, currency)} left this month.`
+    : `${formatMoney(-left, currency)} over this month.`;
 }
 
 function summarizeDay(tasks: number, routines: number): string {

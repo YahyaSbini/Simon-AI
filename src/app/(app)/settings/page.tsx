@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { CalendarConnection } from "@/components/calendar-connection";
+import { CurrencySetting } from "@/components/currency-setting";
 import { SoundSetting } from "@/components/sound-setting";
 import { getCalendarStatus } from "@/lib/calendar";
+import { getCurrency } from "@/lib/finance";
 import { getSession } from "@/lib/session";
 
 export default async function SettingsPage() {
@@ -11,7 +13,10 @@ export default async function SettingsPage() {
     redirect("/sign-in");
   }
 
-  const status = await getCalendarStatus(session.user.id);
+  const [status, currency] = await Promise.all([
+    getCalendarStatus(session.user.id),
+    getCurrency(session.user.id),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -23,6 +28,7 @@ export default async function SettingsPage() {
       </header>
 
       <CalendarConnection status={status} />
+      <CurrencySetting initial={currency} />
       <SoundSetting />
     </div>
   );

@@ -228,6 +228,100 @@ export const dayBlock = pgTable(
   (t) => [index("day_block_user_id_idx").on(t.userId)],
 );
 
+export const entryKind = pgEnum("entry_kind", ["income", "expense"]);
+
+export const financeSettings = pgTable("finance_settings", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => user.id, { onDelete: "cascade" }),
+  currency: text("currency").notNull().default("USD"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const financeCategory = pgTable(
+  "finance_category",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    kind: entryKind("kind").notNull(),
+    name: text("name").notNull(),
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("finance_category_user_id_idx").on(t.userId)],
+);
+
+/** A monthly budget line: a fixed bill when `dueDay` is set, otherwise a spending limit. */
+export const budgetItem = pgTable(
+  "budget_item",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    categoryId: uuid("category_id").references(() => financeCategory.id, {
+      onDelete: "set null",
+    }),
+    name: text("name").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    /** Day of month (1–31) the bill posts itself as an expense. */
+    dueDay: integer("due_day"),
+    startDate: date("start_date").notNull(),
+    /** Last day auto-posting has run for; later due dates are still pending. */
+    postedThrough: date("posted_through"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("budget_item_user_id_idx").on(t.userId)],
+);
+
+export const financeEntry = pgTable(
+  "finance_entry",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    kind: entryKind("kind").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    categoryId: uuid("category_id").references(() => financeCategory.id, {
+      onDelete: "set null",
+    }),
+    /** Set when the entry was posted automatically by a budget bill. */
+    budgetItemId: uuid("budget_item_id").references(() => budgetItem.id, {
+      onDelete: "set null",
+    }),
+    date: date("date").notNull(),
+    note: text("note"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("finance_entry_user_date_idx").on(t.userId, t.date),
+    index("finance_entry_budget_item_idx").on(t.budgetItemId),
+  ],
+);
+
+export const savingsGoal = pgTable(
+  "savings_goal",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    targetCents: integer("target_cents").notNull(),
+    savedCents: integer("saved_cents").notNull().default(0),
+    targetDate: date("target_date"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("savings_goal_user_id_idx").on(t.userId)],
+);
+
 export type List = typeof list.$inferSelect;
 export type DayBlock = typeof dayBlock.$inferSelect;
 export type Task = typeof task.$inferSelect;
@@ -236,3 +330,8 @@ export type Routine = typeof routine.$inferSelect;
 export type RoutineStep = typeof routineStep.$inferSelect;
 export type Priority = (typeof priority.enumValues)[number];
 export type Frequency = (typeof frequency.enumValues)[number];
+export type FinanceCategory = typeof financeCategory.$inferSelect;
+export type BudgetItem = typeof budgetItem.$inferSelect;
+export type FinanceEntry = typeof financeEntry.$inferSelect;
+export type SavingsGoal = typeof savingsGoal.$inferSelect;
+export type EntryKind = (typeof entryKind.enumValues)[number];
