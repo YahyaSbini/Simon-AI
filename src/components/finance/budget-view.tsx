@@ -42,14 +42,12 @@ type Saved = { item: BudgetItemRow; posted: EntryItem[] };
 export function BudgetView({
   month,
   today,
-  currency,
   categories,
   initialItems,
   initialEntries,
 }: {
   month: string;
   today: string;
-  currency: string;
   categories: CategoryItem[];
   initialItems: BudgetItemRow[];
   initialEntries: EntryItem[];
@@ -72,7 +70,7 @@ export function BudgetView({
   const spent = entries
     .filter((entry) => entry.kind === "expense")
     .reduce((sum, entry) => sum + entry.amountCents, 0);
-  const money = (cents: number) => formatMoney(cents, currency);
+  const money = (cents: number) => formatMoney(cents);
 
   function toPayload(draft: Draft) {
     const name = draft.name.trim();

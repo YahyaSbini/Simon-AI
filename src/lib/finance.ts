@@ -71,7 +71,7 @@ export function serializeSavingsGoal(row: SavingsGoal): SavingsGoalItem {
 }
 
 /** Creates the user's settings row on first use and seeds starter categories with it. */
-export async function getCurrency(userId: string): Promise<string> {
+export async function ensureFinanceSetup(userId: string): Promise<void> {
   const [created] = await db
     .insert(financeSettings)
     .values({ userId })
@@ -86,15 +86,7 @@ export async function getCurrency(userId: string): Promise<string> {
         position,
       })),
     );
-    return created.currency;
   }
-
-  const [row] = await db
-    .select({ currency: financeSettings.currency })
-    .from(financeSettings)
-    .where(eq(financeSettings.userId, userId));
-
-  return row?.currency ?? "USD";
 }
 
 /** Due dates of a bill after `after` (exclusive) up to `through` (inclusive). */
@@ -228,14 +220,14 @@ export async function getFinanceMonth(
   month: string,
   today: string,
 ) {
-  const currency = await getCurrency(userId);
+  await ensureFinanceSetup(userId);
   await postDueBills(userId, today);
   const [categories, entries, budget] = await Promise.all([
     getCategories(userId),
     getMonthEntries(userId, month),
     getBudgetItems(userId),
   ]);
-  return { currency, categories, entries, budget };
+  return { categories, entries, budget };
 }
 
 export async function ownsCategory(

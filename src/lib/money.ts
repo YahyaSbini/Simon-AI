@@ -1,34 +1,11 @@
 /** Money and month helpers shared by server and client. Amounts are integer cents. */
 
-export const currencies = [
-  { code: "USD", label: "US dollar" },
-  { code: "EUR", label: "Euro" },
-  { code: "GBP", label: "British pound" },
-  { code: "ILS", label: "Israeli shekel" },
-  { code: "JOD", label: "Jordanian dinar" },
-  { code: "EGP", label: "Egyptian pound" },
-  { code: "SAR", label: "Saudi riyal" },
-  { code: "AED", label: "UAE dirham" },
-  { code: "TRY", label: "Turkish lira" },
-  { code: "CHF", label: "Swiss franc" },
-  { code: "CAD", label: "Canadian dollar" },
-  { code: "AUD", label: "Australian dollar" },
-  { code: "JPY", label: "Japanese yen" },
-  { code: "INR", label: "Indian rupee" },
-] as const;
-
-export type CurrencyCode = (typeof currencies)[number]["code"];
-
-export const currencyCodes = currencies.map((item) => item.code) as [
-  CurrencyCode,
-  ...CurrencyCode[],
-];
+export const currency = "AED";
 
 export const maxCents = 1_000_000_000;
 
 export function formatMoney(
   cents: number,
-  currency: string,
   options: { sign?: boolean } = {},
 ): string {
   return new Intl.NumberFormat(undefined, {

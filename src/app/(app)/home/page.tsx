@@ -4,7 +4,11 @@ import { redirect } from "next/navigation";
 import { formatDay } from "@/lib/dates";
 import { getDayBlocks, getMyDayTasks, getRoutineOccurrences } from "@/lib/data";
 import { blocksOn, isoWeekday } from "@/lib/day-structure";
-import { getCurrency, getMonthEntries, postDueBills } from "@/lib/finance";
+import {
+  ensureFinanceSetup,
+  getMonthEntries,
+  postDueBills,
+} from "@/lib/finance";
 import { formatMoney, monthOf } from "@/lib/money";
 import { getSession } from "@/lib/session";
 import { getTimeZone, todayIn } from "@/lib/timezone";
@@ -67,7 +71,7 @@ export default async function HomePage() {
 }
 
 async function summarizeMoney(userId: string, date: string): Promise<string> {
-  const currency = await getCurrency(userId);
+  await ensureFinanceSetup(userId);
   await postDueBills(userId, date);
   const entries = await getMonthEntries(userId, monthOf(date));
 
@@ -80,8 +84,8 @@ async function summarizeMoney(userId: string, date: string): Promise<string> {
   );
 
   return left >= 0
-    ? `${formatMoney(left, currency)} left this month.`
-    : `${formatMoney(-left, currency)} over this month.`;
+    ? `${formatMoney(left)} left this month.`
+    : `${formatMoney(-left)} over this month.`;
 }
 
 function summarizeDay(tasks: number, routines: number): string {

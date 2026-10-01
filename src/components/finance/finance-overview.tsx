@@ -46,14 +46,12 @@ const kindOptions: { value: Kind; label: string }[] = [
 export function FinanceOverview({
   month,
   today,
-  currency,
   categories,
   budget,
   initialEntries,
 }: {
   month: string;
   today: string;
-  currency: string;
   categories: CategoryItem[];
   budget: BudgetItemRow[];
   initialEntries: EntryItem[];
@@ -63,8 +61,7 @@ export function FinanceOverview({
   const [saving, setSaving] = useState(false);
   const totals = monthTotals(budget, entries, month);
   const left = totals.incomeCents - totals.spentCents;
-  const money = (cents: number, sign = false) =>
-    formatMoney(cents, currency, { sign });
+  const money = (cents: number, sign = false) => formatMoney(cents, { sign });
   const categoryName = useMemo(
     () => new Map(categories.map((item) => [item.id, item.name])),
     [categories],

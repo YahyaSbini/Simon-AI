@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { currencyCodes, maxCents } from "@/lib/money";
+import { maxCents } from "@/lib/money";
 
 export const dateKey = z
   .string()
@@ -90,8 +90,4 @@ export const savingsGoalInput = z.object({
   targetCents: cents,
   savedCents: z.number().int().min(0).max(maxCents).optional(),
   targetDate: dateKey.nullish(),
-});
-
-export const financeSettingsInput = z.object({
-  currency: z.enum(currencyCodes),
 });
