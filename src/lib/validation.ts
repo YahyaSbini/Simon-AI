@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { currencyCodes, maxCents } from "@/lib/money";
 
 export const dateKey = z
   .string()
@@ -59,4 +60,38 @@ export const dayBlockInput = z.object({
 
 export const reorderInput = z.object({
   ids: z.array(z.string().uuid()).min(1).max(500),
+});
+
+const cents = z.number().int().min(1).max(maxCents);
+const entryKind = z.enum(["income", "expense"]);
+
+export const entryInput = z.object({
+  kind: entryKind,
+  amountCents: cents,
+  categoryId: z.string().uuid().nullish(),
+  date: dateKey,
+  note: z.string().trim().max(200).nullish(),
+});
+
+export const categoryInput = z.object({
+  kind: entryKind,
+  name: z.string().trim().min(1).max(40),
+});
+
+export const budgetItemInput = z.object({
+  name: z.string().trim().min(1).max(80),
+  amountCents: cents,
+  categoryId: z.string().uuid().nullish(),
+  dueDay: z.number().int().min(1).max(31).nullish(),
+});
+
+export const savingsGoalInput = z.object({
+  name: z.string().trim().min(1).max(80),
+  targetCents: cents,
+  savedCents: z.number().int().min(0).max(maxCents).optional(),
+  targetDate: dateKey.nullish(),
+});
+
+export const financeSettingsInput = z.object({
+  currency: z.enum(currencyCodes),
 });

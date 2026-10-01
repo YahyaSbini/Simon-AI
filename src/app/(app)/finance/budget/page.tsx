@@ -1,12 +1,12 @@
 import { redirect } from "next/navigation";
+import { BudgetView } from "@/components/finance/budget-view";
 import { FinanceHeader } from "@/components/finance/finance-bits";
-import { FinanceOverview } from "@/components/finance/finance-overview";
 import { getFinanceMonth } from "@/lib/finance";
 import { isMonthKey, monthOf } from "@/lib/money";
 import { getSession } from "@/lib/session";
 import { getTimeZone, todayIn } from "@/lib/timezone";
 
-export default async function FinancePage({
+export default async function BudgetPage({
   searchParams,
 }: {
   searchParams: Promise<{ month?: string }>;
@@ -25,18 +25,18 @@ export default async function FinancePage({
   return (
     <div className="space-y-6">
       <FinanceHeader
-        title="Overview"
+        title="Budget"
         month={month}
         current={monthOf(today)}
-        path="/finance"
+        path="/finance/budget"
       />
-      <FinanceOverview
+      <BudgetView
         key={month}
         month={month}
         today={today}
         currency={data.currency}
         categories={data.categories}
-        budget={data.budget}
+        initialItems={data.budget}
         initialEntries={data.entries}
       />
     </div>

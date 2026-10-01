@@ -1,4 +1,4 @@
-import type { Frequency, Priority } from "@/db/schema";
+import type { EntryKind, Frequency, Priority } from "@/db/schema";
 
 export type ListItem = {
   id: string;
@@ -12,6 +12,39 @@ export type DayBlockItem = {
   end: string;
   label: string;
   color: string | null;
+};
+
+export type CategoryItem = {
+  id: string;
+  kind: EntryKind;
+  name: string;
+};
+
+export type EntryItem = {
+  id: string;
+  kind: EntryKind;
+  amountCents: number;
+  categoryId: string | null;
+  budgetItemId: string | null;
+  date: string;
+  note: string | null;
+};
+
+export type BudgetItemRow = {
+  id: string;
+  name: string;
+  categoryId: string | null;
+  amountCents: number;
+  dueDay: number | null;
+  startDate: string;
+};
+
+export type SavingsGoalItem = {
+  id: string;
+  name: string;
+  targetCents: number;
+  savedCents: number;
+  targetDate: string | null;
 };
 
 export type StepItem = {

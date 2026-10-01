@@ -9,11 +9,14 @@ import {
   Landmark,
   ListTodo,
   Menu,
+  PiggyBank,
   Plus,
   Repeat,
   Settings,
   Star,
   Sun,
+  Tags,
+  Wallet,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -81,7 +84,12 @@ export const modules: Module[] = [
     label: "Financial Management",
     icon: Landmark,
     routes: ["/finance"],
-    views: [{ href: "/finance", label: "Overview", icon: Landmark }],
+    views: [
+      { href: "/finance", label: "Overview", icon: Landmark },
+      { href: "/finance/budget", label: "Budget", icon: Wallet },
+      { href: "/finance/savings", label: "Savings", icon: PiggyBank },
+      { href: "/finance/categories", label: "Categories", icon: Tags },
+    ],
   },
   {
     id: "time",
