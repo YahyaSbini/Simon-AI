@@ -13,6 +13,9 @@ export type MonthTotals = {
   incomeCents: number;
   spentCents: number;
   budgetedCents: number;
+  /** Expected entries, kept apart from the received and paid figures. */
+  expectedIncomeCents: number;
+  expectedSpendCents: number;
 };
 
 /** Budget items that existed during `month`. */
@@ -23,9 +26,10 @@ export function activeIn(items: BudgetItemRow[], month: string) {
 
 export function budgetLines(
   items: BudgetItemRow[],
-  entries: EntryItem[],
+  allEntries: EntryItem[],
   month: string,
 ): BudgetLine[] {
+  const entries = allEntries.filter((entry) => !entry.expected);
   return activeIn(items, month).map((item) => {
     if (item.dueDay) {
       const posted = entries.filter((entry) => entry.budgetItemId === item.id);
@@ -59,13 +63,24 @@ export function monthTotals(
 ): MonthTotals {
   let incomeCents = 0;
   let spentCents = 0;
+  let expectedIncomeCents = 0;
+  let expectedSpendCents = 0;
   for (const entry of entries) {
-    if (entry.kind === "income") incomeCents += entry.amountCents;
+    if (entry.expected) {
+      if (entry.kind === "income") expectedIncomeCents += entry.amountCents;
+      else expectedSpendCents += entry.amountCents;
+    } else if (entry.kind === "income") incomeCents += entry.amountCents;
     else spentCents += entry.amountCents;
   }
   const budgetedCents = activeIn(items, month).reduce(
     (sum, item) => sum + item.amountCents,
     0,
   );
-  return { incomeCents, spentCents, budgetedCents };
+  return {
+    incomeCents,
+    spentCents,
+    budgetedCents,
+    expectedIncomeCents,
+    expectedSpendCents,
+  };
 }

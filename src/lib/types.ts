@@ -28,6 +28,7 @@ export type EntryItem = {
   budgetItemId: string | null;
   date: string;
   note: string | null;
+  expected: boolean;
 };
 
 export type BudgetItemRow = {

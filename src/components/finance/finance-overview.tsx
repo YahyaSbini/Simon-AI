@@ -3,6 +3,7 @@
 import {
   ArrowRight,
   Check,
+  CircleCheck,
   Pencil,
   Plus,
   Repeat,
@@ -14,7 +15,9 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Meter, Segmented, sendJson } from "@/components/finance/finance-bits";
 import { selectClass } from "@/components/task-detail";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { monthTotals } from "@/lib/budget";
 import {
@@ -36,6 +39,7 @@ type Draft = {
   categoryId: string;
   date: string;
   note: string;
+  expected: boolean;
 };
 
 const kindOptions: { value: Kind; label: string }[] = [
@@ -61,6 +65,8 @@ export function FinanceOverview({
   const [saving, setSaving] = useState(false);
   const totals = monthTotals(budget, entries, month);
   const left = totals.incomeCents - totals.spentCents;
+  const hasExpected =
+    totals.expectedIncomeCents > 0 || totals.expectedSpendCents > 0;
   const money = (cents: number, sign = false) => formatMoney(cents, { sign });
   const categoryName = useMemo(
     () => new Map(categories.map((item) => [item.id, item.name])),
@@ -93,6 +99,7 @@ export function FinanceOverview({
       categoryId: draft.categoryId || null,
       date: draft.date,
       note: draft.note.trim() || null,
+      expected: draft.expected,
     };
   }
 
@@ -139,6 +146,25 @@ export function FinanceOverview({
     return true;
   }
 
+  async function settleEntry(entry: EntryItem) {
+    setEntries((current) =>
+      current.map((item) =>
+        item.id === entry.id ? { ...item, expected: false } : item,
+      ),
+    );
+    const result = await sendJson<{ entry: EntryItem }>(
+      `/api/finance/entries/${entry.id}`,
+      "PATCH",
+      { expected: false },
+    );
+    if (!result) {
+      toast.error("Couldn't update that entry.");
+      setEntries((current) =>
+        current.map((item) => (item.id === entry.id ? entry : item)),
+      );
+    }
+  }
+
   async function removeEntry(entry: EntryItem) {
     const previous = entries;
     setEntries((current) => current.filter((item) => item.id !== entry.id));
@@ -161,6 +187,21 @@ export function FinanceOverview({
             className={cn(left < 0 && "text-destructive")}
           />
         </dl>
+
+        {hasExpected ? (
+          <p className="text-muted-foreground text-sm tabular-nums">
+            Expected:{" "}
+            {[
+              totals.expectedIncomeCents > 0 &&
+                `${money(totals.expectedIncomeCents, true)} to receive`,
+              totals.expectedSpendCents > 0 &&
+                `${money(-totals.expectedSpendCents, true)} to pay`,
+              `${money(left + totals.expectedIncomeCents - totals.expectedSpendCents)} left after`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        ) : null}
 
         {totals.budgetedCents > 0 ? (
           <Link
@@ -200,6 +241,7 @@ export function FinanceOverview({
             categoryId: "",
             date: month === monthOf(today) ? today : `${month}-01`,
             note: "",
+            expected: false,
           }}
           categories={categories}
           saving={saving}
@@ -229,6 +271,7 @@ export function FinanceOverview({
                             categoryId: entry.categoryId ?? "",
                             date: entry.date,
                             note: entry.note ?? "",
+                            expected: entry.expected,
                           }}
                           categories={categories}
                           onSubmit={(draft) => updateEntry(entry, draft)}
@@ -240,7 +283,12 @@ export function FinanceOverview({
                         key={entry.id}
                         className="group/row flex min-h-11 items-center gap-3 py-1.5"
                       >
-                        <div className="min-w-0 flex-1">
+                        <div
+                          className={cn(
+                            "min-w-0 flex-1",
+                            entry.expected && "text-muted-foreground",
+                          )}
+                        >
                           <p className="flex items-center gap-1.5 truncate text-sm">
                             {entry.categoryId
                               ? (categoryName.get(entry.categoryId) ??
@@ -251,6 +299,15 @@ export function FinanceOverview({
                                 className="text-muted-foreground size-3.5 shrink-0"
                                 aria-label="Posted by a budget bill"
                               />
+                            ) : null}
+                            {entry.expected ? (
+                              <Badge
+                                variant={
+                                  entry.date < today ? "destructive" : "outline"
+                                }
+                              >
+                                {entry.date < today ? "Overdue" : "Expected"}
+                              </Badge>
                             ) : null}
                           </p>
                           {entry.note ? (
@@ -263,6 +320,7 @@ export function FinanceOverview({
                           className={cn(
                             "shrink-0 text-sm tabular-nums",
                             entry.kind === "income" && "font-medium",
+                            entry.expected && "text-muted-foreground",
                           )}
                         >
                           {money(
@@ -272,6 +330,20 @@ export function FinanceOverview({
                             true,
                           )}
                         </span>
+                        {entry.expected ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="shrink-0"
+                            onClick={() => settleEntry(entry)}
+                          >
+                            <CircleCheck data-icon="inline-start" />
+                            {entry.kind === "income"
+                              ? "Mark received"
+                              : "Mark paid"}
+                          </Button>
+                        ) : null}
                         <span className="flex shrink-0 items-center opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 max-md:opacity-100">
                           <Button
                             type="button"
@@ -353,7 +425,7 @@ function EntryForm({
     event.preventDefault();
     const ok = await onSubmit(draft);
     if (ok && !editing) {
-      setDraft({ ...draft, amount: "", note: "" });
+      setDraft({ ...draft, amount: "", note: "", expected: false });
     }
   }
 
@@ -420,6 +492,15 @@ function EntryForm({
         maxLength={200}
         className="min-w-32 flex-1"
       />
+      <label className="text-muted-foreground flex min-h-9 cursor-pointer items-center gap-2 px-1 text-sm select-none">
+        <Checkbox
+          checked={draft.expected}
+          onCheckedChange={(checked) =>
+            setDraft({ ...draft, expected: checked })
+          }
+        />
+        Expected
+      </label>
       <div className="flex items-center gap-1">
         {onCancel ? (
           <Button
