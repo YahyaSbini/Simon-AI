@@ -1,4 +1,4 @@
-import { toDateKey } from "@/lib/dates";
+import { toDateKey, today } from "@/lib/dates";
 import type { TaskItem } from "@/lib/types";
 
 export type TaskViewKey =
@@ -53,12 +53,13 @@ export function searchMatches(
     .includes(needle);
 }
 
-/** Tasks view default: dated tasks first (soonest due on top), then the rest in saved order. */
-export function dueDateFirst(tasks: TaskItem[]): TaskItem[] {
+/** Tasks view default: due today first, then other dated tasks (overdue, then upcoming), then the rest in saved order. */
+export function dueDateFirst(tasks: TaskItem[], date = today()): TaskItem[] {
+  const rank = (task: TaskItem) =>
+    task.dueAt === null ? 2 : toDateKey(new Date(task.dueAt)) === date ? 0 : 1;
   return [...tasks].sort((a, b) => {
-    if (a.dueAt === null || b.dueAt === null) {
-      return Number(a.dueAt === null) - Number(b.dueAt === null);
-    }
+    const diff = rank(a) - rank(b);
+    if (diff || a.dueAt === null || b.dueAt === null) return diff;
     return a.dueAt.localeCompare(b.dueAt);
   });
 }

@@ -26,12 +26,14 @@ export function TaskView({
   listId = null,
   view,
   emptyMessage,
+  date,
 }: {
   initialTasks: TaskItem[];
   lists: ListItem[];
   listId?: string | null;
   view: TaskViewKey;
   emptyMessage: string;
+  date?: string;
 }) {
   const store = useTaskStore();
   const matches = useCallback(
@@ -40,8 +42,8 @@ export function TaskView({
   );
   const unsorted = useTasks(initialTasks, matches);
   const tasks = useMemo(
-    () => (view === "all" ? dueDateFirst(unsorted) : unsorted),
-    [view, unsorted],
+    () => (view === "all" ? dueDateFirst(unsorted, date) : unsorted),
+    [view, unsorted, date],
   );
   const [title, setTitle] = useState("");
   const [openTaskId, setOpenTaskId] = useOpenParam();
