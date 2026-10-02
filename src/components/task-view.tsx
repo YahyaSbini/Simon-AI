@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarClock, Clock, Sun, Trash2 } from "lucide-react";
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useMemo, useState, useTransition } from "react";
 import { SortableList, SortableRow } from "@/components/sortable-list";
 import { RowTrail } from "@/components/task-bits";
 import { useOpenParam } from "@/components/use-open-param";
@@ -11,7 +11,12 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { formatDue, formatMinutes, today } from "@/lib/dates";
-import { isOverdue, taskMatches, type TaskViewKey } from "@/lib/task-views";
+import {
+  dueDateFirst,
+  isOverdue,
+  taskMatches,
+  type TaskViewKey,
+} from "@/lib/task-views";
 import type { ListItem, TaskItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -33,7 +38,11 @@ export function TaskView({
     (task: TaskItem) => taskMatches(view, task, { listId }),
     [view, listId],
   );
-  const tasks = useTasks(initialTasks, matches);
+  const unsorted = useTasks(initialTasks, matches);
+  const tasks = useMemo(
+    () => (view === "all" ? dueDateFirst(unsorted) : unsorted),
+    [view, unsorted],
+  );
   const [title, setTitle] = useState("");
   const [openTaskId, setOpenTaskId] = useOpenParam();
   const [pending, startTransition] = useTransition();
