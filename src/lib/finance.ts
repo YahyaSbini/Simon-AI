@@ -46,6 +46,7 @@ export function serializeEntry(row: FinanceEntry): EntryItem {
     budgetItemId: row.budgetItemId,
     date: row.date,
     note: row.note,
+    expected: row.expected,
   };
 }
 

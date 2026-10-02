@@ -295,6 +295,8 @@ export const financeEntry = pgTable(
     }),
     date: date("date").notNull(),
     note: text("note"),
+    /** Income still to receive or a payment still to make; left out of totals. */
+    expected: boolean("expected").notNull().default(false),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },

@@ -71,6 +71,7 @@ export const entryInput = z.object({
   categoryId: z.string().uuid().nullish(),
   date: dateKey,
   note: z.string().trim().max(200).nullish(),
+  expected: z.boolean().optional(),
 });
 
 export const categoryInput = z.object({

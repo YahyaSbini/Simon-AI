@@ -68,7 +68,7 @@ export function BudgetView({
   const limits = lines.filter((line) => !line.item.dueDay);
   const budgeted = lines.reduce((sum, line) => sum + line.item.amountCents, 0);
   const spent = entries
-    .filter((entry) => entry.kind === "expense")
+    .filter((entry) => entry.kind === "expense" && !entry.expected)
     .reduce((sum, entry) => sum + entry.amountCents, 0);
   const money = (cents: number) => formatMoney(cents);
 

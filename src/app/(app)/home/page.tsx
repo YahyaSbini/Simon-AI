@@ -77,11 +77,14 @@ async function summarizeMoney(userId: string, date: string): Promise<string> {
 
   if (!entries.length) return "Log income and expenses, set a monthly budget.";
 
-  const left = entries.reduce(
-    (sum, entry) =>
-      sum + (entry.kind === "income" ? entry.amountCents : -entry.amountCents),
-    0,
-  );
+  const left = entries
+    .filter((entry) => !entry.expected)
+    .reduce(
+      (sum, entry) =>
+        sum +
+        (entry.kind === "income" ? entry.amountCents : -entry.amountCents),
+      0,
+    );
 
   return left >= 0
     ? `${formatMoney(left)} left this month.`
