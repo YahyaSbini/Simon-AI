@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { TaskView } from "@/components/task-view";
 import { getLists, getTasks } from "@/lib/data";
 import { getSession } from "@/lib/session";
+import { getTimeZone, todayIn } from "@/lib/timezone";
 
 export default async function TasksPage() {
   const session = await getSession();
@@ -10,6 +11,7 @@ export default async function TasksPage() {
     redirect("/sign-in");
   }
 
+  const date = todayIn(await getTimeZone());
   const [tasks, lists] = await Promise.all([
     getTasks(session.user.id, "all"),
     getLists(session.user.id),
@@ -26,6 +28,7 @@ export default async function TasksPage() {
         initialTasks={tasks}
         lists={lists}
         view="all"
+        date={date}
         emptyMessage="Nothing here yet. Add your first task above."
       />
     </div>
