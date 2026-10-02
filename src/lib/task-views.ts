@@ -2,12 +2,7 @@ import { toDateKey } from "@/lib/dates";
 import type { TaskItem } from "@/lib/types";
 
 export type TaskViewKey =
-  | "all"
-  | "important"
-  | "planned"
-  | "list"
-  | "my-day"
-  | "completed";
+  "all" | "important" | "planned" | "list" | "my-day" | "completed";
 
 /** Client-side mirror of the server queries in `data.ts`, so live edits stay in the right views. */
 export function taskMatches(
@@ -48,8 +43,22 @@ export function searchMatches(
 ): boolean {
   const needle = query.trim().toLowerCase();
   if (!needle) return true;
-  return [item.title, item.notes ?? "", ...(item.steps ?? []).map((s) => s.title)]
+  return [
+    item.title,
+    item.notes ?? "",
+    ...(item.steps ?? []).map((s) => s.title),
+  ]
     .join("\n")
     .toLowerCase()
     .includes(needle);
+}
+
+/** Tasks view default: dated tasks first (soonest due on top), then the rest in saved order. */
+export function dueDateFirst(tasks: TaskItem[]): TaskItem[] {
+  return [...tasks].sort((a, b) => {
+    if (a.dueAt === null || b.dueAt === null) {
+      return Number(a.dueAt === null) - Number(b.dueAt === null);
+    }
+    return a.dueAt.localeCompare(b.dueAt);
+  });
 }

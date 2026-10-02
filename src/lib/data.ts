@@ -1,4 +1,13 @@
-import { and, asc, desc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  sql,
+} from "drizzle-orm";
 import { db } from "@/db";
 import type {
   DayBlock,
@@ -68,7 +77,14 @@ export async function getTasks(
     .orderBy(
       ...(view === "completed"
         ? [desc(task.completedAt)]
-        : [asc(task.position), desc(task.createdAt)]),
+        : view === "all"
+          ? [
+              sql`${task.dueAt} is null`,
+              asc(task.dueAt),
+              asc(task.position),
+              desc(task.createdAt),
+            ]
+          : [asc(task.position), desc(task.createdAt)]),
     );
 
   const steps = rows.length
