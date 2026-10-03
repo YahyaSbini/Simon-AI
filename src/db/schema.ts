@@ -207,6 +207,25 @@ export const routineStepCompletion = pgTable(
   ],
 );
 
+/** A Google Calendar event the user ticked off in My Day. */
+export const calendarEventCompletion = pgTable(
+  "calendar_event_completion",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    eventId: text("event_id").notNull(),
+    completedAt: timestamp("completed_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("calendar_event_completion_user_event_idx").on(
+      t.userId,
+      t.eventId,
+    ),
+  ],
+);
+
 /** A block of the user's standard week: "10:00–11:00 Work" on the given weekdays. */
 export const dayBlock = pgTable(
   "day_block",

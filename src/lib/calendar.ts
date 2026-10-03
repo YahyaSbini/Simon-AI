@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { db } from "@/db";
-import { account } from "@/db/schema";
+import { account, calendarEventCompletion } from "@/db/schema";
 import { auth, calendarScope, googleConfigured } from "@/lib/auth";
 import { dayRangeIn } from "@/lib/timezone";
 import type {
@@ -97,8 +97,17 @@ export async function getCalendarAgenda(
 
   const payload = (await response.json()) as { items?: GoogleEvent[] };
 
+  const ticked = new Set(
+    (
+      await db
+        .select({ eventId: calendarEventCompletion.eventId })
+        .from(calendarEventCompletion)
+        .where(eq(calendarEventCompletion.userId, userId))
+    ).map((row) => row.eventId),
+  );
+
   const events: CalendarEvent[] = (payload.items ?? [])
-    .filter((item) => item.status !== "cancelled")
+    .filter((item) => item.status !== "cancelled" && !ticked.has(item.id))
     .map((item) => ({
       id: item.id,
       title: item.summary ?? "Untitled event",
