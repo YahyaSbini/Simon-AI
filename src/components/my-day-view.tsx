@@ -53,6 +53,7 @@ export function MyDayView({
   const [tickedTasks, setTickedTasks] = useState(0);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
   const inflight = useRef(new Map<string, Promise<void>>());
+  const confirmed = useRef(new Map<string, boolean>());
   const [pending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -173,23 +174,37 @@ export function MyDayView({
       });
     }
 
+    if (!confirmed.current.has(item.id)) {
+      confirmed.current.set(item.id, item.completed);
+    }
     const previous = inflight.current.get(item.id) ?? Promise.resolve();
     const request = previous.then(async () => {
-      const response = await fetch(
-        completed
-          ? `/api/routines/${item.id}/completion`
-          : `/api/routines/${item.id}/completion?date=${date}`,
-        {
-          method: completed ? "POST" : "DELETE",
-          headers: { "Content-Type": "application/json" },
-          ...(completed ? { body: JSON.stringify({ date }) } : {}),
-        },
-      );
+      let ok = false;
+      try {
+        const response = await fetch(
+          completed
+            ? `/api/routines/${item.id}/completion`
+            : `/api/routines/${item.id}/completion?date=${date}`,
+          {
+            method: completed ? "POST" : "DELETE",
+            headers: { "Content-Type": "application/json" },
+            ...(completed ? { body: JSON.stringify({ date }) } : {}),
+          },
+        );
+        ok = response.ok;
+      } catch {
+        ok = false;
+      }
 
-      if (!response.ok) {
+      if (ok) {
+        confirmed.current.set(item.id, completed);
+      } else if (inflight.current.get(item.id) === request) {
+        const saved = confirmed.current.get(item.id) ?? item.completed;
         toast.error("Couldn't update that routine.");
         setRoutines((current) =>
-          current.map((entry) => (entry.id === item.id ? item : entry)),
+          current.map((entry) =>
+            entry.id === item.id ? { ...entry, completed: saved } : entry,
+          ),
         );
       }
     });
