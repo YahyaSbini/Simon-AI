@@ -35,6 +35,11 @@ export const routineInput = z.object({
 });
 
 /** Inclusive range check shared by create and (merged) update. */
+export const calendarCompletionInput = z.object({
+  eventId: z.string().min(1).max(1024),
+  date: dateKey,
+});
+
 export function validDateRange(range: {
   startDate: string;
   endDate?: string | null;

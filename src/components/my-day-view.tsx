@@ -208,7 +208,7 @@ export function MyDayView({
 
   return (
     <div className="flex flex-col gap-10 pb-24">
-      {agenda.connected && <Agenda agenda={agenda} />}
+      {agenda.connected && <Agenda agenda={agenda} date={date} />}
 
       <div className="space-y-10">
         {empty ? (
@@ -427,19 +427,86 @@ function SectionHeader({
   );
 }
 
-function Agenda({ agenda }: { agenda: CalendarAgenda }) {
+function Agenda({ agenda, date }: { agenda: CalendarAgenda; date: string }) {
+  const [events, setEvents] = useState(agenda.events);
+  const [ticked, setTicked] = useState<Set<string>>(() => new Set());
+  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+
+  useEffect(() => {
+    setEvents(agenda.events);
+  }, [agenda.events]);
+
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      for (const timer of pending.values()) clearTimeout(timer);
+    };
+  }, []);
+
+  function restore(eventId: string) {
+    const timer = timers.current.get(eventId);
+    if (timer) clearTimeout(timer);
+    timers.current.delete(eventId);
+    setTicked((current) => {
+      const next = new Set(current);
+      next.delete(eventId);
+      return next;
+    });
+    setEvents((current) => {
+      const kept = new Set(current.map((item) => item.id)).add(eventId);
+      return agenda.events.filter((item) => kept.has(item.id));
+    });
+  }
+
+  function tick(event: CalendarEvent) {
+    playCompleteSound();
+    setTicked((current) => new Set(current).add(event.id));
+
+    timers.current.set(
+      event.id,
+      setTimeout(() => {
+        timers.current.delete(event.id);
+        setEvents((current) => current.filter((item) => item.id !== event.id));
+      }, 600),
+    );
+
+    void fetch("/api/calendar/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eventId: event.id, date }),
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(response.statusText);
+      })
+      .catch(() => {
+        restore(event.id);
+        toast.error("Couldn't tick that meeting.");
+      });
+  }
+
+  function untick(event: CalendarEvent) {
+    restore(event.id);
+
+    const query = new URLSearchParams({ eventId: event.id, date });
+    void fetch(`/api/calendar/completions?${query}`, { method: "DELETE" })
+      .then((response) => {
+        if (!response.ok) throw new Error(response.statusText);
+      })
+      .catch(() => toast.error("Couldn't untick that meeting."));
+  }
+
   return (
     <section className="space-y-1">
       <SectionHeader
         icon={CalendarDays}
         label="Schedule"
         detail={
-          agenda.events.length
-            ? `${agenda.events.length} ${agenda.events.length === 1 ? "event" : "events"}`
+          events.length
+            ? `${events.length} ${events.length === 1 ? "event" : "events"}`
             : undefined
         }
       />
-      {agenda.events.length === 0 && (
+      {events.length === 0 && (
         <p className="text-muted-foreground text-sm">
           {agenda.failed
             ? "Couldn't reach Google Calendar."
@@ -447,24 +514,44 @@ function Agenda({ agenda }: { agenda: CalendarAgenda }) {
         </p>
       )}
       <ul>
-        {agenda.events.map((event) => (
-          <li
-            key={event.id}
-            className="hover:bg-muted/50 -mx-2 flex items-baseline gap-3 rounded-md px-2 py-2 transition-colors duration-150"
-          >
-            <span className="text-muted-foreground w-16 shrink-0 text-xs tabular-nums">
-              {formatEventTime(event)}
-            </span>
-            <div className="min-w-0 flex-1">
-              <span className="block truncate">{event.title}</span>
-              {event.location && (
-                <span className="text-muted-foreground block truncate text-xs">
-                  {event.location}
-                </span>
+        {events.map((event) => {
+          const done = ticked.has(event.id);
+          return (
+            <li
+              key={event.id}
+              className={cn(
+                "hover:bg-muted/50 -mx-2 flex items-center gap-3 rounded-md px-2 py-2 transition-all duration-500",
+                done && "opacity-40",
               )}
-            </div>
-          </li>
-        ))}
+            >
+              <Checkbox
+                checked={done}
+                onCheckedChange={(checked) =>
+                  checked ? tick(event) : untick(event)
+                }
+                aria-label={`Mark meeting "${event.title}" done`}
+              />
+              <span className="text-muted-foreground w-16 shrink-0 text-xs tabular-nums">
+                {formatEventTime(event)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <span
+                  className={cn(
+                    "block truncate",
+                    done && "text-muted-foreground line-through",
+                  )}
+                >
+                  {event.title}
+                </span>
+                {event.location && (
+                  <span className="text-muted-foreground block truncate text-xs">
+                    {event.location}
+                  </span>
+                )}
+              </div>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
