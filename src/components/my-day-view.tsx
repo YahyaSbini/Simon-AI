@@ -208,7 +208,7 @@ export function MyDayView({
 
   return (
     <div className="flex flex-col gap-10 pb-24">
-      {agenda.connected && <Agenda agenda={agenda} />}
+      {agenda.connected && <Agenda agenda={agenda} date={date} />}
 
       <div className="space-y-10">
         {empty ? (
@@ -427,7 +427,7 @@ function SectionHeader({
   );
 }
 
-function Agenda({ agenda }: { agenda: CalendarAgenda }) {
+function Agenda({ agenda, date }: { agenda: CalendarAgenda; date: string }) {
   const [events, setEvents] = useState(agenda.events);
   const [ticked, setTicked] = useState<Set<string>>(() => new Set());
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -443,8 +443,22 @@ function Agenda({ agenda }: { agenda: CalendarAgenda }) {
     };
   }, []);
 
+  function restore(eventId: string) {
+    const timer = timers.current.get(eventId);
+    if (timer) clearTimeout(timer);
+    timers.current.delete(eventId);
+    setTicked((current) => {
+      const next = new Set(current);
+      next.delete(eventId);
+      return next;
+    });
+    setEvents((current) => {
+      const kept = new Set(current.map((item) => item.id)).add(eventId);
+      return agenda.events.filter((item) => kept.has(item.id));
+    });
+  }
+
   function tick(event: CalendarEvent) {
-    if (ticked.has(event.id)) return;
     playCompleteSound();
     setTicked((current) => new Set(current).add(event.id));
 
@@ -459,23 +473,26 @@ function Agenda({ agenda }: { agenda: CalendarAgenda }) {
     void fetch("/api/calendar/completions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ eventId: event.id }),
-    }).then((response) => {
-      if (response.ok) return;
-      const timer = timers.current.get(event.id);
-      if (timer) clearTimeout(timer);
-      timers.current.delete(event.id);
-      setTicked((current) => {
-        const next = new Set(current);
-        next.delete(event.id);
-        return next;
+      body: JSON.stringify({ eventId: event.id, date }),
+    })
+      .then((response) => {
+        if (!response.ok) throw new Error(response.statusText);
+      })
+      .catch(() => {
+        restore(event.id);
+        toast.error("Couldn't tick that meeting.");
       });
-      setEvents((current) => {
-        const kept = new Set(current.map((item) => item.id)).add(event.id);
-        return agenda.events.filter((item) => kept.has(item.id));
-      });
-      toast.error("Couldn't tick that meeting.");
-    });
+  }
+
+  function untick(event: CalendarEvent) {
+    restore(event.id);
+
+    const query = new URLSearchParams({ eventId: event.id, date });
+    void fetch(`/api/calendar/completions?${query}`, { method: "DELETE" })
+      .then((response) => {
+        if (!response.ok) throw new Error(response.statusText);
+      })
+      .catch(() => toast.error("Couldn't untick that meeting."));
   }
 
   return (
@@ -509,7 +526,9 @@ function Agenda({ agenda }: { agenda: CalendarAgenda }) {
             >
               <Checkbox
                 checked={done}
-                onCheckedChange={() => tick(event)}
+                onCheckedChange={(checked) =>
+                  checked ? tick(event) : untick(event)
+                }
                 aria-label={`Mark meeting "${event.title}" done`}
               />
               <span className="text-muted-foreground w-16 shrink-0 text-xs tabular-nums">

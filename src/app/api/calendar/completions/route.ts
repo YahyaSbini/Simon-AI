@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { calendarEventCompletion } from "@/db/schema";
 import { requireUserId } from "@/lib/session";
-import { calendarEventIdInput } from "@/lib/validation";
+import { calendarCompletionInput } from "@/lib/validation";
 
 export async function POST(request: Request) {
   const userId = await requireUserId();
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const parsed = calendarEventIdInput.safeParse(await request.json());
+  const parsed = calendarCompletionInput.safeParse(await request.json());
 
   if (!parsed.success) {
     return NextResponse.json({ error: "Invalid event." }, { status: 400 });
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
   await db
     .insert(calendarEventCompletion)
-    .values({ userId, eventId: parsed.data.eventId })
+    .values({ userId, eventId: parsed.data.eventId, date: parsed.data.date })
     .onConflictDoNothing();
 
   return NextResponse.json({ completed: true }, { status: 201 });
@@ -33,8 +33,10 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const parsed = calendarEventIdInput.safeParse({
-    eventId: new URL(request.url).searchParams.get("eventId"),
+  const query = new URL(request.url).searchParams;
+  const parsed = calendarCompletionInput.safeParse({
+    eventId: query.get("eventId"),
+    date: query.get("date"),
   });
 
   if (!parsed.success) {
@@ -47,6 +49,7 @@ export async function DELETE(request: Request) {
       and(
         eq(calendarEventCompletion.userId, userId),
         eq(calendarEventCompletion.eventId, parsed.data.eventId),
+        eq(calendarEventCompletion.date, parsed.data.date),
       ),
     );
 

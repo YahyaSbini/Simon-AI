@@ -102,7 +102,12 @@ export async function getCalendarAgenda(
       await db
         .select({ eventId: calendarEventCompletion.eventId })
         .from(calendarEventCompletion)
-        .where(eq(calendarEventCompletion.userId, userId))
+        .where(
+          and(
+            eq(calendarEventCompletion.userId, userId),
+            eq(calendarEventCompletion.date, date),
+          ),
+        )
     ).map((row) => row.eventId),
   );
 

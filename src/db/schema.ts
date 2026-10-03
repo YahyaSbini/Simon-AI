@@ -216,12 +216,15 @@ export const calendarEventCompletion = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     eventId: text("event_id").notNull(),
+    /** Local agenda day the event was ticked on (multiday events are ticked per day). */
+    date: date("date").notNull(),
     completedAt: timestamp("completed_at").notNull().defaultNow(),
   },
   (t) => [
-    uniqueIndex("calendar_event_completion_user_event_idx").on(
+    uniqueIndex("calendar_event_completion_user_event_date_idx").on(
       t.userId,
       t.eventId,
+      t.date,
     ),
   ],
 );
