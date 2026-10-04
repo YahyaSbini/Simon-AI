@@ -16,6 +16,12 @@ export function fromDateKey(key: string): Date {
   return new Date(year, month - 1, day);
 }
 
+export function addDays(value: Date, days: number): Date {
+  const next = new Date(value);
+  next.setDate(next.getDate() + days);
+  return next;
+}
+
 export function daysBetween(from: string, to: string): number {
   const ms = fromDateKey(to).getTime() - fromDateKey(from).getTime();
   return Math.round(ms / 86_400_000);

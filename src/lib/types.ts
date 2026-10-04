@@ -83,12 +83,17 @@ export type RoutineItem = {
   timeOfDay: string | null;
   startDate: string;
   endDate: string | null;
+  carryOver: boolean;
   active: boolean;
   recurrence: string;
   steps: StepItem[];
 };
 
 export type RoutineOccurrence = RoutineItem & {
+  /** Day this occurrence belongs to; earlier than today for carried-over misses. */
+  date: string;
+  /** `${id}:${date}` — unique per row, since a routine can appear for several days. */
+  key: string;
   completed: boolean;
 };
 

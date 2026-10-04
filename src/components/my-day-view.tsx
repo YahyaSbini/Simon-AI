@@ -13,7 +13,7 @@ import { TaskRows } from "@/components/task-view";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { formatMinutes } from "@/lib/dates";
+import { formatDue, formatMinutes, fromDateKey } from "@/lib/dates";
 import { playCompleteSound } from "@/lib/sound";
 import { taskMatches } from "@/lib/task-views";
 import type {
@@ -48,7 +48,7 @@ export function MyDayView({
   const [routines, setRoutines] = useState(initialRoutines);
   const [title, setTitle] = useState("");
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
-  const [openRoutineId, setOpenRoutineId] = useState<string | null>(null);
+  const [openRoutineKey, setOpenRoutineKey] = useState<string | null>(null);
   const [leaving, setLeaving] = useState<Set<string>>(() => new Set());
   const [tickedTasks, setTickedTasks] = useState(0);
   const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>());
@@ -62,10 +62,10 @@ export function MyDayView({
 
   const openTask = store.tasks[openTaskId ?? ""] ?? null;
   const openRoutine =
-    routines.find((item) => item.id === openRoutineId) ?? null;
+    routines.find((item) => item.key === openRoutineKey) ?? null;
   const openRoutines = routines.filter((item) => !item.completed);
   const visibleRoutines = routines.filter(
-    (item) => !item.completed || leaving.has(item.id),
+    (item) => !item.completed || leaving.has(item.key),
   );
 
   const openCount = tasks.length + openRoutines.length;
@@ -81,6 +81,7 @@ export function MyDayView({
       const created = await store.createTask({
         title: trimmed,
         myDayDate: date,
+        dueAt: new Date(`${date}T12:00:00`).toISOString(),
       });
       if (created) setTitle("");
     });
@@ -117,20 +118,32 @@ export function MyDayView({
 
   function setRoutineSteps(routineId: string, steps: StepItem[]) {
     setRoutines((current) =>
-      current.map((entry) =>
-        entry.id === routineId ? { ...entry, steps } : entry,
-      ),
+      current.map((entry) => {
+        if (entry.id !== routineId) return entry;
+        if (entry.key === openRoutineKey) return { ...entry, steps };
+        const ticked = new Map(
+          entry.steps.map((step) => [step.id, step.completed]),
+        );
+        return {
+          ...entry,
+          steps: steps.map((step) => ({
+            ...step,
+            completed: ticked.get(step.id) ?? false,
+          })),
+        };
+      }),
     );
   }
 
-  function reorderRoutines(ids: string[]) {
-    const byId = new Map(routines.map((item) => [item.id, item]));
-    const ordered = ids.map((id) => byId.get(id)!).filter(Boolean);
-    const moved = new Set(ids);
+  function reorderRoutines(keys: string[]) {
+    const byKey = new Map(routines.map((item) => [item.key, item]));
+    const ordered = keys.map((key) => byKey.get(key)!).filter(Boolean);
+    const moved = new Set(keys);
     setRoutines((current) =>
-      current.filter((item) => !moved.has(item.id)).concat(ordered),
+      current.filter((item) => !moved.has(item.key)).concat(ordered),
     );
 
+    const ids = [...new Set(ordered.map((item) => item.id))];
     void fetch("/api/routines/reorder", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -146,21 +159,21 @@ export function MyDayView({
 
     setRoutines((current) =>
       current.map((entry) =>
-        entry.id === item.id ? { ...entry, completed } : entry,
+        entry.key === item.key ? { ...entry, completed } : entry,
       ),
     );
 
-    const timer = timers.current.get(item.id);
+    const timer = timers.current.get(item.key);
     if (timer) clearTimeout(timer);
     if (completed) {
-      setLeaving((current) => new Set(current).add(item.id));
+      setLeaving((current) => new Set(current).add(item.key));
       timers.current.set(
-        item.id,
+        item.key,
         setTimeout(() => {
-          timers.current.delete(item.id);
+          timers.current.delete(item.key);
           setLeaving((current) => {
             const next = new Set(current);
-            next.delete(item.id);
+            next.delete(item.key);
             return next;
           });
         }, 600),
@@ -168,36 +181,36 @@ export function MyDayView({
     } else {
       setLeaving((current) => {
         const next = new Set(current);
-        next.delete(item.id);
+        next.delete(item.key);
         return next;
       });
     }
 
-    const previous = inflight.current.get(item.id) ?? Promise.resolve();
+    const previous = inflight.current.get(item.key) ?? Promise.resolve();
     const request = previous.then(async () => {
       const response = await fetch(
         completed
           ? `/api/routines/${item.id}/completion`
-          : `/api/routines/${item.id}/completion?date=${date}`,
+          : `/api/routines/${item.id}/completion?date=${item.date}`,
         {
           method: completed ? "POST" : "DELETE",
           headers: { "Content-Type": "application/json" },
-          ...(completed ? { body: JSON.stringify({ date }) } : {}),
+          ...(completed ? { body: JSON.stringify({ date: item.date }) } : {}),
         },
       );
 
       if (!response.ok) {
         toast.error("Couldn't update that routine.");
         setRoutines((current) =>
-          current.map((entry) => (entry.id === item.id ? item : entry)),
+          current.map((entry) => (entry.key === item.key ? item : entry)),
         );
       }
     });
-    inflight.current.set(item.id, request);
+    inflight.current.set(item.key, request);
     startTransition(async () => {
       await request;
-      if (inflight.current.get(item.id) === request) {
-        inflight.current.delete(item.id);
+      if (inflight.current.get(item.key) === request) {
+        inflight.current.delete(item.key);
       }
     });
   }
@@ -283,13 +296,13 @@ export function MyDayView({
             />
 
             <SortableList
-              ids={visibleRoutines.map((item) => item.id)}
+              ids={visibleRoutines.map((item) => item.key)}
               onReorder={reorderRoutines}
             >
               {visibleRoutines.map((item) => (
                 <SortableRow
-                  key={item.id}
-                  id={item.id}
+                  key={item.key}
+                  id={item.key}
                   className={cn(
                     "py-2.5 transition-opacity duration-500",
                     item.completed && "opacity-40",
@@ -302,7 +315,7 @@ export function MyDayView({
                   />
                   <button
                     type="button"
-                    onClick={() => setOpenRoutineId(item.id)}
+                    onClick={() => setOpenRoutineKey(item.key)}
                     className="min-w-0 flex-1 text-left"
                   >
                     <span
@@ -333,8 +346,13 @@ export function MyDayView({
                     )}
                   </button>
                   <RowTrail
-                    time={routineTime(item)}
+                    time={
+                      item.date < date
+                        ? formatDue(fromDateKey(item.date))
+                        : routineTime(item)
+                    }
                     priority={item.priority}
+                    overdue={item.date < date}
                     important={item.important}
                     onStar={() =>
                       patchRoutine(item, { important: !item.important })
@@ -380,8 +398,8 @@ export function MyDayView({
       <RoutineEditor
         open={openRoutine !== null}
         routine={openRoutine}
-        date={date}
-        onClose={() => setOpenRoutineId(null)}
+        date={openRoutine?.date ?? date}
+        onClose={() => setOpenRoutineKey(null)}
         onStepsChange={setRoutineSteps}
         onSaved={(item) => {
           setRoutines((current) =>
@@ -389,7 +407,7 @@ export function MyDayView({
               entry.id === item.id ? { ...entry, ...item } : entry,
             ),
           );
-          setOpenRoutineId(null);
+          setOpenRoutineKey(null);
         }}
       />
 

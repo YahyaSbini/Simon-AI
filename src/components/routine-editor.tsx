@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { StepEditor } from "@/components/step-editor";
 import { selectClass } from "@/components/task-detail";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
@@ -35,6 +36,7 @@ type Draft = {
   priority: RoutineItem["priority"];
   startDate: string;
   endDate: string;
+  carryOver: boolean;
 };
 
 function emptyDraft(): Draft {
@@ -51,6 +53,7 @@ function emptyDraft(): Draft {
     priority: "none",
     startDate: today(),
     endDate: "",
+    carryOver: false,
   };
 }
 
@@ -67,6 +70,7 @@ function toDraft(routine: RoutineItem): Draft {
     priority: routine.priority,
     startDate: routine.startDate,
     endDate: routine.endDate ?? "",
+    carryOver: routine.carryOver,
   };
 }
 
@@ -138,6 +142,7 @@ export function RoutineEditor({
       priority: draft.priority,
       startDate: isDateKey(draft.startDate) ? draft.startDate : today(),
       endDate: isDateKey(draft.endDate) ? draft.endDate : null,
+      carryOver: draft.carryOver,
     };
 
     setSaving(true);
@@ -335,6 +340,29 @@ export function RoutineEditor({
               />
             </div>
           </div>
+
+          <label
+            htmlFor="routine-carry-over"
+            className="flex cursor-pointer items-start gap-3 py-1"
+          >
+            <Checkbox
+              id="routine-carry-over"
+              checked={draft.carryOver}
+              onCheckedChange={(checked) =>
+                setDraft({ ...draft, carryOver: checked === true })
+              }
+              className="mt-0.5"
+            />
+            <span className="space-y-0.5">
+              <span className="block text-sm leading-none font-medium">
+                Carry over if missed
+              </span>
+              <span className="text-muted-foreground block text-xs">
+                Unticked days stay in My Day as overdue until you tick them.
+                Off: a missed day simply disappears.
+              </span>
+            </span>
+          </label>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

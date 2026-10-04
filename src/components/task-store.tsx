@@ -17,8 +17,7 @@ import type { StepItem, TaskItem } from "@/lib/types";
 type TaskMap = Record<string, TaskItem>;
 
 type Message =
-  | { type: "upsert"; task: TaskItem }
-  | { type: "remove"; id: string };
+  { type: "upsert"; task: TaskItem } | { type: "remove"; id: string };
 
 type TaskStore = {
   tasks: TaskMap;
@@ -28,6 +27,7 @@ type TaskStore = {
     title: string;
     listId?: string | null;
     myDayDate?: string | null;
+    dueAt?: string | null;
   }) => Promise<TaskItem | null>;
   patchTask: (item: TaskItem, changes: Partial<TaskItem>, body: object) => void;
   deleteTask: (item: TaskItem) => void;
@@ -236,7 +236,8 @@ export function TaskStoreProvider({ children }: { children: React.ReactNode }) {
 
 export function useTaskStore(): TaskStore {
   const store = useContext(TaskStoreContext);
-  if (!store) throw new Error("useTaskStore must be used within TaskStoreProvider");
+  if (!store)
+    throw new Error("useTaskStore must be used within TaskStoreProvider");
   return store;
 }
 

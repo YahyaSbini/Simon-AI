@@ -31,6 +31,7 @@ export const routineInput = z.object({
     .nullish(),
   startDate: dateKey.optional(),
   endDate: dateKey.nullish(),
+  carryOver: z.boolean().optional(),
   active: z.boolean().optional(),
 });
 
