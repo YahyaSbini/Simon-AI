@@ -3,9 +3,11 @@ import {
   asc,
   desc,
   eq,
+  gte,
   inArray,
   isNotNull,
   isNull,
+  lte,
   sql,
 } from "drizzle-orm";
 import { db } from "@/db";
@@ -26,7 +28,7 @@ import {
   task,
   taskStep,
 } from "@/db/schema";
-import { toDateKey } from "@/lib/dates";
+import { addDays, fromDateKey, toDateKey } from "@/lib/dates";
 import { describeRecurrence, occursOn } from "@/lib/routines";
 import type {
   DayBlockItem,
@@ -145,6 +147,7 @@ export function serializeRoutine(
     timeOfDay: row.timeOfDay,
     startDate: row.startDate,
     endDate: row.endDate,
+    carryOver: row.carryOver,
     active: row.active,
     recurrence: describeRecurrence(row),
     steps: steps
@@ -183,18 +186,28 @@ export async function getRoutines(
     );
 
   const steps = await getRoutineSteps(rows.map((row) => row.id));
-  const done = await getCompletedStepIds(steps, date);
+  const doneKeys = await getCompletedStepKeys(steps, date, date);
+  const done = new Set(
+    steps
+      .filter((step) => doneKeys.has(`${step.id}:${date}`))
+      .map((step) => step.id),
+  );
 
   return rows.map((row) => serializeRoutine(row, steps, done));
 }
 
-async function getCompletedStepIds(
+/** `${stepId}:${date}` for every ticked step within the inclusive date range. */
+async function getCompletedStepKeys(
   steps: RoutineStep[],
-  date: string,
+  from: string,
+  to: string,
 ): Promise<Set<string>> {
   if (!steps.length) return new Set();
   const rows = await db
-    .select({ stepId: routineStepCompletion.stepId })
+    .select({
+      stepId: routineStepCompletion.stepId,
+      date: routineStepCompletion.date,
+    })
     .from(routineStepCompletion)
     .where(
       and(
@@ -202,13 +215,21 @@ async function getCompletedStepIds(
           routineStepCompletion.stepId,
           steps.map((step) => step.id),
         ),
-        eq(routineStepCompletion.date, date),
+        gte(routineStepCompletion.date, from),
+        lte(routineStepCompletion.date, to),
       ),
     );
-  return new Set(rows.map((row) => row.stepId));
+  return new Set(rows.map((row) => `${row.stepId}:${row.date}`));
 }
 
-/** Routine occurrences for a single day, with their completion state. */
+/** How far back a carry-over routine keeps missed days. */
+const carryOverDays = 30;
+
+/**
+ * Routine occurrences for a day, with their completion state. Carry-over
+ * routines also contribute their unticked occurrences from the previous
+ * `carryOverDays`, oldest first.
+ */
 export async function getRoutineOccurrences(
   userId: string,
   date: string,
@@ -223,32 +244,62 @@ export async function getRoutineOccurrences(
       asc(routine.createdAt),
     );
 
-  const due = rows.filter((row) => occursOn(row, date));
+  const from = toDateKey(addDays(fromDateKey(date), -carryOverDays));
+  const candidates: { row: Routine; date: string }[] = [];
 
-  if (!due.length) return [];
+  for (const row of rows) {
+    if (row.carryOver) {
+      for (let offset = carryOverDays; offset >= 1; offset--) {
+        const day = toDateKey(addDays(fromDateKey(date), -offset));
+        if (occursOn(row, day)) candidates.push({ row, date: day });
+      }
+    }
+    if (occursOn(row, date)) candidates.push({ row, date });
+  }
 
-  const steps = await getRoutineSteps(due.map((row) => row.id));
-  const doneSteps = await getCompletedStepIds(steps, date);
+  if (!candidates.length) return [];
+
+  const ids = [...new Set(candidates.map((entry) => entry.row.id))];
+  const steps = await getRoutineSteps(ids);
+  const doneSteps = await getCompletedStepKeys(steps, from, date);
 
   const completions = await db
-    .select({ routineId: routineCompletion.routineId })
+    .select({
+      routineId: routineCompletion.routineId,
+      date: routineCompletion.date,
+    })
     .from(routineCompletion)
     .where(
       and(
-        inArray(
-          routineCompletion.routineId,
-          due.map((row) => row.id),
-        ),
-        eq(routineCompletion.date, date),
+        inArray(routineCompletion.routineId, ids),
+        gte(routineCompletion.date, from),
+        lte(routineCompletion.date, date),
       ),
     );
 
-  const completed = new Set(completions.map((row) => row.routineId));
+  const completed = new Set(
+    completions.map((row) => `${row.routineId}:${row.date}`),
+  );
 
-  return due.map((row) => ({
-    ...serializeRoutine(row, steps, doneSteps),
-    completed: completed.has(row.id),
-  }));
+  return candidates
+    .filter(
+      (entry) =>
+        entry.date === date || !completed.has(`${entry.row.id}:${entry.date}`),
+    )
+    .map((entry) => {
+      const key = `${entry.row.id}:${entry.date}`;
+      const done = new Set(
+        steps
+          .filter((step) => doneSteps.has(`${step.id}:${entry.date}`))
+          .map((step) => step.id),
+      );
+      return {
+        ...serializeRoutine(entry.row, steps, done),
+        date: entry.date,
+        key,
+        completed: completed.has(key),
+      };
+    });
 }
 
 /** Open tasks that belong on My Day: flagged for today, or due on/before today. */

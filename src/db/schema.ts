@@ -153,6 +153,8 @@ export const routine = pgTable(
     startDate: date("start_date").notNull(),
     /** Last day the routine repeats, inclusive. */
     endDate: date("end_date"),
+    /** Missed days stay in My Day (overdue) until ticked instead of vanishing. */
+    carryOver: boolean("carry_over").notNull().default(false),
     position: integer("position").notNull().default(0),
     active: boolean("active").notNull().default(true),
     createdAt: timestamp("created_at").notNull().defaultNow(),
