@@ -104,7 +104,7 @@ export const modules: Module[] = [
         label: "Day Structure",
         icon: CalendarRange,
       },
-      { href: "/time/rules", label: "Rules", icon: ScrollText },
+      { href: "/time/rules", label: "Time Management", icon: ScrollText },
     ],
   },
 ];

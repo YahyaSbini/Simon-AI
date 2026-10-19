@@ -127,6 +127,26 @@ export type CalendarAgenda = {
   events: CalendarEvent[];
 };
 
+/** A Google event placed on one ISO weekday of the current week. */
+export type WeekEvent = {
+  key: string;
+  title: string;
+  url: string | null;
+  weekday: number;
+  allDay: boolean;
+  /** Minutes from local midnight; 0 for all-day events. */
+  from: number;
+  length: number;
+};
+
+export type CalendarWeek = {
+  connected: boolean;
+  failed: boolean;
+  /** `YYYY-MM-DD` for Monday … Sunday of the current week. */
+  dates: string[];
+  events: WeekEvent[];
+};
+
 export type CalendarStatus = {
   /** Whether Google OAuth credentials are set on the server. */
   configured: boolean;
