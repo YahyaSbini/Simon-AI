@@ -244,12 +244,48 @@ export const dayBlock = pgTable(
     /** Local time as HH:MM; `end` before `start` means the block runs overnight. */
     start: text("start").notNull(),
     end: text("end").notNull(),
+    /** May be empty when the block is shown by its emoji alone. */
     label: text("label").notNull(),
+    emoji: text("emoji"),
     color: text("color"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (t) => [index("day_block_user_id_idx").on(t.userId)],
+);
+
+/** A user-named group of time rules, e.g. "Constraints" or "Rules". */
+export const timeSection = pgTable(
+  "time_section",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("time_section_user_id_idx").on(t.userId)],
+);
+
+export const timeSectionItem = pgTable(
+  "time_section_item",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    sectionId: uuid("section_id")
+      .notNull()
+      .references(() => timeSection.id, { onDelete: "cascade" }),
+    text: text("text").notNull(),
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("time_section_item_section_id_idx").on(t.sectionId)],
 );
 
 export const entryKind = pgEnum("entry_kind", ["income", "expense"]);
@@ -349,6 +385,8 @@ export const savingsGoal = pgTable(
 
 export type List = typeof list.$inferSelect;
 export type DayBlock = typeof dayBlock.$inferSelect;
+export type TimeSection = typeof timeSection.$inferSelect;
+export type TimeSectionItemRow = typeof timeSectionItem.$inferSelect;
 export type Task = typeof task.$inferSelect;
 export type TaskStep = typeof taskStep.$inferSelect;
 export type Routine = typeof routine.$inferSelect;

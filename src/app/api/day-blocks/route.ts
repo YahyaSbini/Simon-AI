@@ -26,7 +26,7 @@ export async function POST(request: Request) {
 
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Check the block's days, times and label." },
+      { error: "Check the block's days, times, and name or emoji." },
       { status: 400 },
     );
   }

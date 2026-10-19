@@ -11,7 +11,19 @@ export type DayBlockItem = {
   start: string;
   end: string;
   label: string;
+  emoji: string | null;
   color: string | null;
+};
+
+export type TimeSectionEntry = {
+  id: string;
+  text: string;
+};
+
+export type TimeSectionItem = {
+  id: string;
+  title: string;
+  items: TimeSectionEntry[];
 };
 
 export type CategoryItem = {

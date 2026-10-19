@@ -20,6 +20,8 @@ import type {
 } from "@/db/schema";
 import {
   dayBlock,
+  timeSection,
+  timeSectionItem,
   list,
   routine,
   routineCompletion,
@@ -32,6 +34,7 @@ import { addDays, fromDateKey, toDateKey } from "@/lib/dates";
 import { describeRecurrence, occursOn } from "@/lib/routines";
 import type {
   DayBlockItem,
+  TimeSectionItem,
   ListItem,
   RoutineItem,
   RoutineOccurrence,
@@ -342,6 +345,7 @@ export function serializeDayBlock(row: DayBlock): DayBlockItem {
     start: row.start,
     end: row.end,
     label: row.label,
+    emoji: row.emoji,
     color: row.color,
   };
 }
@@ -354,6 +358,31 @@ export async function getDayBlocks(userId: string): Promise<DayBlockItem[]> {
     .orderBy(asc(dayBlock.start), asc(dayBlock.createdAt));
 
   return rows.map(serializeDayBlock);
+}
+
+export async function getTimeSections(
+  userId: string,
+): Promise<TimeSectionItem[]> {
+  const [sections, items] = await Promise.all([
+    db
+      .select()
+      .from(timeSection)
+      .where(eq(timeSection.userId, userId))
+      .orderBy(asc(timeSection.position), asc(timeSection.createdAt)),
+    db
+      .select()
+      .from(timeSectionItem)
+      .where(eq(timeSectionItem.userId, userId))
+      .orderBy(asc(timeSectionItem.position), asc(timeSectionItem.createdAt)),
+  ]);
+
+  return sections.map((section) => ({
+    id: section.id,
+    title: section.title,
+    items: items
+      .filter((item) => item.sectionId === section.id)
+      .map((item) => ({ id: item.id, text: item.text })),
+  }));
 }
 
 export type CompletedRoutine = RoutineItem & {

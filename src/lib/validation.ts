@@ -50,18 +50,45 @@ export function validDateRange(range: {
 
 export const dayBlockColors = [
   "azure",
-  "wood",
+  "sky",
+  "teal",
+  "emerald",
   "sage",
+  "lime",
+  "amber",
+  "orange",
   "clay",
+  "red",
+  "rose",
+  "pink",
+  "violet",
+  "indigo",
+  "wood",
   "slate",
 ] as const;
 
-export const dayBlockInput = z.object({
+const dayBlockFields = z.object({
   weekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7),
   start: z.string().regex(/^\d{2}:\d{2}$/),
   end: z.string().regex(/^\d{2}:\d{2}$/),
-  label: z.string().trim().min(1).max(80),
+  label: z.string().trim().max(80),
+  emoji: z.string().trim().max(16).nullish(),
   color: z.enum(dayBlockColors).nullish(),
+});
+
+export const dayBlockInput = dayBlockFields.refine(
+  (block) => Boolean(block.label || block.emoji),
+  { message: "Give the block a name or an emoji." },
+);
+
+export const dayBlockUpdate = dayBlockFields.partial();
+
+export const timeSectionInput = z.object({
+  title: z.string().trim().min(1).max(80),
+});
+
+export const timeSectionItemInput = z.object({
+  text: z.string().trim().min(1).max(500),
 });
 
 export const reorderInput = z.object({
