@@ -12,6 +12,7 @@ import {
   PiggyBank,
   Plus,
   Repeat,
+  ScrollText,
   Settings,
   Star,
   Sun,
@@ -103,6 +104,7 @@ export const modules: Module[] = [
         label: "Day Structure",
         icon: CalendarRange,
       },
+      { href: "/time/rules", label: "Rules", icon: ScrollText },
     ],
   },
 ];
@@ -127,7 +129,7 @@ export function AppShell({
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const moduleId = moduleFor(pathname)?.id;
-  const wide = moduleId === "my-day" || moduleId === "time";
+  const wide = moduleId === "my-day";
 
   return (
     <div className="flex min-h-dvh">
@@ -177,7 +179,11 @@ export function AppShell({
         <main
           className={cn(
             "mx-auto w-full flex-1 px-4 py-6 md:px-8 md:py-10",
-            wide ? "max-w-5xl" : "max-w-3xl",
+            moduleId === "time"
+              ? "max-w-7xl"
+              : wide
+                ? "max-w-5xl"
+                : "max-w-3xl",
           )}
         >
           <TaskStoreProvider>{children}</TaskStoreProvider>

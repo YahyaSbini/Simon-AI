@@ -1,10 +1,16 @@
 "use client";
 
-import { Check, Copy, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, Copy, Pencil, Plus, Smile, Trash2, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import {
+  asBlockColor,
+  type BlockColor,
+  blockColors,
+  textOn,
+} from "@/lib/block-colors";
 import {
   blocksOn,
   durationOf,
@@ -17,33 +23,29 @@ import type { DayBlockItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { dayBlockColors } from "@/lib/validation";
 
-type Color = (typeof dayBlockColors)[number];
+type Color = BlockColor;
 
-const colorClass: Record<Color, string> = {
-  azure: "bg-chart-1",
-  wood: "bg-chart-2",
-  sage: "bg-chart-3",
-  clay: "bg-chart-4",
-  slate: "bg-chart-5",
-};
+const emojiChoices = (
+  "😴 💤 🌙 ☀️ 💼 💻 🏢 📞 📚 📖 ✍️ 🎓 🧠 🏋️ 🏃 ⚽ 🧘 🕌 🙏 🍳 " +
+  "🍽️ ☕ 🚿 🧹 🛒 🚗 ✈️ 🏠 👨‍👩‍👧 💬 🎮 📺 🎵 🎨 🛠️ 🌳 🐾 🩺 💊 💰"
+).split(" ");
 
-const segmentText: Record<Color, string> = {
-  azure: "text-white",
-  wood: "text-white",
-  sage: "text-white dark:text-ink",
-  clay: "text-white dark:text-ink",
-  slate: "text-white dark:text-ink",
-};
-
-function asColor(color: string | null): Color {
-  return color && color in colorClass ? (color as Color) : "azure";
+function fill(color: string | null): React.CSSProperties {
+  const key = asBlockColor(color);
+  return { backgroundColor: blockColors[key], color: textOn(key) };
 }
 
-function swatch(color: string | null): string {
-  return colorClass[asColor(color)];
+function titleOf(block: Pick<DayBlockItem, "emoji" | "label">): string {
+  return [block.emoji, block.label].filter(Boolean).join(" ");
 }
 
-type Draft = { start: string; end: string; label: string; color: Color };
+type Draft = {
+  start: string;
+  end: string;
+  label: string;
+  emoji: string | null;
+  color: Color;
+};
 
 const presets = {
   weekdays: [1, 2, 3, 4, 5],
@@ -287,7 +289,8 @@ export function DayStructureView({
                       start: slot.block.start,
                       end: slot.block.end,
                       label: slot.block.label,
-                      color: asColor(slot.block.color),
+                      emoji: slot.block.emoji,
+                      color: asBlockColor(slot.block.color),
                     }}
                     submitLabel="Save"
                     onCancel={() => setEditingId(null)}
@@ -304,10 +307,8 @@ export function DayStructureView({
                   className="group/row hover:bg-muted/50 focus-within:bg-muted/50 -mx-2 flex items-center gap-3 rounded-md px-2 py-2.5 transition-colors duration-150"
                 >
                   <span
-                    className={cn(
-                      "size-2.5 shrink-0 rounded-full",
-                      swatch(slot.block.color),
-                    )}
+                    className="size-2.5 shrink-0 rounded-full"
+                    style={fill(slot.block.color)}
                     aria-hidden
                   />
                   <span className="w-[5.5rem] shrink-0 text-sm tabular-nums sm:w-[6.5rem]">
@@ -315,7 +316,7 @@ export function DayStructureView({
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[15px]">
-                      {slot.block.label}
+                      {titleOf(slot.block)}
                     </span>
                     {!sameSet(
                       slot.block.weekdays.filter((day) => days.includes(day)),
@@ -339,7 +340,7 @@ export function DayStructureView({
                       type="button"
                       variant="ghost"
                       size="icon-sm"
-                      aria-label={`Edit ${slot.block.label}`}
+                      aria-label={`Edit ${titleOf(slot.block)}`}
                       onClick={() => setEditingId(slot.block.id)}
                     >
                       <Pencil />
@@ -349,7 +350,7 @@ export function DayStructureView({
                       variant="ghost"
                       size="icon-sm"
                       className="hover:text-destructive"
-                      aria-label={`Remove ${slot.block.label}`}
+                      aria-label={`Remove ${titleOf(slot.block)}`}
                       onClick={() => removeBlock(slot.block)}
                     >
                       <Trash2 />
@@ -368,6 +369,7 @@ export function DayStructureView({
               start: nextStart(visible),
               end: nextEnd(visible),
               label: "",
+              emoji: null,
               color: "azure",
             }}
             submitLabel="Add block"
@@ -406,23 +408,31 @@ function BlockForm({
   onCancel?: () => void;
 }) {
   const [draft, setDraft] = useState<Draft>(initial);
+  const [picking, setPicking] = useState(false);
   const editing = Boolean(onCancel);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const label = draft.label.trim();
-    if (!label) {
-      toast.error("Give the block a name.");
+    const emoji = draft.emoji?.trim() || null;
+    if (!label && !emoji) {
+      toast.error("Give the block a name or an emoji.");
       return;
     }
     if (draft.start === draft.end) {
       toast.error("Start and end can't be the same time.");
       return;
     }
-    const ok = await onSubmit({ ...draft, label });
+    const ok = await onSubmit({ ...draft, label, emoji });
     if (ok && !editing) {
-      setDraft({ ...draft, label: "" });
+      setDraft({ ...draft, label: "", emoji: null });
+      setPicking(false);
     }
+  }
+
+  function pickEmoji(emoji: string | null) {
+    setDraft({ ...draft, emoji });
+    setPicking(false);
   }
 
   return (
@@ -442,7 +452,7 @@ function BlockForm({
           }
           aria-label="Start time"
           required
-          className="w-[6.5rem] tabular-nums"
+          className="w-[7.5rem] tabular-nums"
         />
         <span className="text-muted-foreground text-sm">–</span>
         <Input
@@ -451,20 +461,39 @@ function BlockForm({
           onChange={(event) => setDraft({ ...draft, end: event.target.value })}
           aria-label="End time"
           required
-          className="w-[6.5rem] tabular-nums"
+          className="w-[7.5rem] tabular-nums"
         />
       </div>
-      <Input
-        value={draft.label}
-        onChange={(event) => setDraft({ ...draft, label: event.target.value })}
-        placeholder="What happens then? e.g. Work, Gym, Sleep"
-        aria-label="Block name"
-        maxLength={80}
-        autoFocus={editing}
-        className="min-w-40 flex-1"
-      />
+      <div className="flex min-w-48 flex-1 items-center gap-1.5">
+        <Button
+          type="button"
+          variant="outline"
+          size="icon"
+          aria-label={draft.emoji ? `Emoji ${draft.emoji}` : "Add an emoji"}
+          aria-expanded={picking}
+          onClick={() => setPicking((value) => !value)}
+          className="shrink-0 text-base"
+        >
+          {draft.emoji ? (
+            <span aria-hidden>{draft.emoji}</span>
+          ) : (
+            <Smile className="text-muted-foreground" />
+          )}
+        </Button>
+        <Input
+          value={draft.label}
+          onChange={(event) =>
+            setDraft({ ...draft, label: event.target.value })
+          }
+          placeholder="What happens then? e.g. Work, Gym, Sleep"
+          aria-label="Block name"
+          maxLength={80}
+          autoFocus={editing}
+          className="min-w-0 flex-1"
+        />
+      </div>
       <div
-        className="flex items-center gap-1"
+        className="flex flex-wrap items-center"
         role="radiogroup"
         aria-label="Color"
       >
@@ -475,18 +504,17 @@ function BlockForm({
             role="radio"
             aria-checked={draft.color === color}
             aria-label={color}
+            title={color}
             onClick={() => setDraft({ ...draft, color })}
-            className={cn(
-              "focus-visible:ring-ring flex size-7 items-center justify-center rounded-full outline-none focus-visible:ring-2",
-            )}
+            className="focus-visible:ring-ring flex size-6 items-center justify-center rounded-full outline-none focus-visible:ring-2"
           >
             <span
               className={cn(
                 "size-3.5 rounded-full transition-transform",
-                colorClass[color],
                 draft.color === color &&
-                  "ring-foreground/60 scale-125 ring-2 ring-offset-1 ring-offset-background",
+                  "ring-foreground/60 ring-offset-background scale-125 ring-2 ring-offset-1",
               )}
+              style={{ backgroundColor: blockColors[color] }}
             />
           </button>
         ))}
@@ -519,7 +547,92 @@ function BlockForm({
           )}
         </Button>
       </div>
+      {picking && (
+        <EmojiPicker
+          value={draft.emoji}
+          onPick={pickEmoji}
+          onClose={() => setPicking(false)}
+        />
+      )}
     </form>
+  );
+}
+
+function EmojiPicker({
+  value,
+  onPick,
+  onClose,
+}: {
+  value: string | null;
+  onPick: (emoji: string | null) => void;
+  onClose: () => void;
+}) {
+  const [custom, setCustom] = useState("");
+
+  return (
+    <div
+      className="border-border bg-card animate-in fade-in-0 slide-in-from-top-1 basis-full space-y-2 rounded-md border p-2 duration-150"
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.stopPropagation();
+          onClose();
+        }
+      }}
+    >
+      <div className="grid grid-cols-8 gap-0.5 sm:grid-cols-[repeat(20,minmax(0,1fr))]">
+        {emojiChoices.map((emoji) => (
+          <button
+            key={emoji}
+            type="button"
+            aria-label={emoji}
+            aria-pressed={value === emoji}
+            onClick={() => onPick(emoji)}
+            className={cn(
+              "hover:bg-muted focus-visible:ring-ring flex h-9 items-center justify-center rounded-md text-lg transition-colors outline-none focus-visible:ring-2",
+              value === emoji && "bg-muted",
+            )}
+          >
+            {emoji}
+          </button>
+        ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Input
+          value={custom}
+          onChange={(event) => setCustom(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.preventDefault();
+              if (custom.trim()) onPick(custom.trim());
+            }
+          }}
+          placeholder="Or type / paste any emoji"
+          aria-label="Custom emoji"
+          maxLength={16}
+          className="w-52"
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!custom.trim()}
+          onClick={() => onPick(custom.trim())}
+        >
+          Use
+        </Button>
+        {value && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground ml-auto"
+            onClick={() => onPick(null)}
+          >
+            No emoji
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -581,6 +694,18 @@ function CopyPicker({
   );
 }
 
+const hourHeight = 32;
+const dayHeight = hourHeight * 24;
+
+type Segment = {
+  key: string;
+  block: DayBlockItem;
+  from: number;
+  length: number;
+  lane: number;
+  lanes: number;
+};
+
 function segmentsOf(block: DayBlockItem): [number, number][] {
   const start = toMinutes(block.start);
   const duration = durationOf(block);
@@ -590,6 +715,46 @@ function segmentsOf(block: DayBlockItem): [number, number][] {
         [0, start + duration - 1440],
       ]
     : [[start, duration]];
+}
+
+/** Place a day's segments in side-by-side lanes wherever they overlap. */
+function layoutDay(blocks: DayBlockItem[]): Segment[] {
+  const pieces = blocks
+    .flatMap((block) =>
+      segmentsOf(block).map(([from, length], index) => ({
+        key: `${block.id}-${index}`,
+        block,
+        from,
+        length,
+        lane: 0,
+        lanes: 1,
+      })),
+    )
+    .sort((a, b) => a.from - b.from || b.length - a.length);
+
+  const placed: Segment[] = [];
+  let cluster: Segment[] = [];
+  let laneEnds: number[] = [];
+  let clusterEnd = -1;
+
+  const closeCluster = () => {
+    for (const piece of cluster) piece.lanes = laneEnds.length;
+    placed.push(...cluster);
+    cluster = [];
+    laneEnds = [];
+  };
+
+  for (const piece of pieces) {
+    if (piece.from >= clusterEnd) closeCluster();
+    const free = laneEnds.findIndex((end) => end <= piece.from);
+    piece.lane = free === -1 ? laneEnds.length : free;
+    laneEnds[piece.lane] = piece.from + piece.length;
+    clusterEnd = Math.max(clusterEnd, piece.from + piece.length);
+    cluster.push(piece);
+  }
+  closeCluster();
+
+  return placed;
 }
 
 function WeekGrid({
@@ -605,85 +770,120 @@ function WeekGrid({
   onToggleDay: (day: number) => void;
   onPickBlock: (day: number, block: DayBlockItem) => void;
 }) {
+  const columns = useMemo(
+    () =>
+      weekdays.map((day) => ({
+        day,
+        segments: layoutDay(blocksOn(blocks, day.value)),
+      })),
+    [blocks],
+  );
+
   return (
-    <div className="space-y-1.5">
-      <ul className="flex flex-col gap-1.5">
-        {weekdays.map((day) => {
+    <div className="border-border bg-card overflow-x-auto rounded-md border">
+      <div className="grid min-w-[46rem] grid-cols-[3.25rem_repeat(7,minmax(0,1fr))]">
+        <div className="bg-card border-border sticky left-0 z-20 border-b" />
+        {columns.map(({ day }) => {
           const active = selected.includes(day.value);
-          const dayBlocks = blocksOn(blocks, day.value);
           return (
-            <li key={day.value} className="flex items-stretch gap-2">
-              <button
-                type="button"
-                aria-pressed={active}
-                aria-label={day.label}
-                onClick={() => onToggleDay(day.value)}
-                className={cn(
-                  "border-border focus-visible:ring-ring w-14 shrink-0 rounded-md border text-sm transition-colors outline-none focus-visible:ring-2 sm:w-16",
-                  active
-                    ? "border-wood/60 bg-card text-foreground"
-                    : "text-muted-foreground hover:bg-muted/50",
-                  day.value === today && "font-medium",
-                )}
-              >
-                {day.short}
-                {day.value === today && (
-                  <span
-                    className="bg-azure ml-1 inline-block size-1.5 rounded-full align-middle"
-                    aria-hidden
-                  />
-                )}
-              </button>
-              <div
-                className={cn(
-                  "bg-muted/60 relative h-10 min-w-0 flex-1 overflow-hidden rounded-md transition-colors",
-                  active && "bg-muted",
-                )}
-              >
-                {dayBlocks.length === 0 && (
-                  <span className="text-muted-foreground absolute inset-0 flex items-center px-3 text-xs">
-                    –
-                  </span>
-                )}
-                {dayBlocks.map((block) =>
-                  segmentsOf(block).map(([from, length], index) => (
-                    <button
-                      key={`${block.id}-${index}`}
-                      type="button"
-                      title={`${block.label} · ${block.start} – ${block.end}`}
-                      aria-label={`${block.label}, ${block.start} to ${block.end}`}
-                      onClick={() => onPickBlock(day.value, block)}
-                      className={cn(
-                        "focus-visible:ring-ring absolute inset-y-0.5 flex items-center overflow-hidden rounded px-1.5 text-xs whitespace-nowrap outline-none hover:brightness-110 focus-visible:ring-2",
-                        swatch(block.color),
-                        segmentText[asColor(block.color)],
-                      )}
-                      style={{
-                        left: `${(from / 1440) * 100}%`,
-                        width: `calc(${(length / 1440) * 100}% - 2px)`,
-                      }}
-                    >
-                      <span className="truncate">
-                        {index === 0 || length >= 120 ? block.label : ""}
-                      </span>
-                    </button>
-                  )),
-                )}
-              </div>
-            </li>
+            <button
+              key={day.value}
+              type="button"
+              aria-pressed={active}
+              aria-label={day.label}
+              onClick={() => onToggleDay(day.value)}
+              className={cn(
+                "border-border focus-visible:ring-ring flex h-10 items-center justify-center gap-1.5 border-b border-l text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-inset",
+                active
+                  ? "bg-muted text-foreground font-medium"
+                  : "text-muted-foreground hover:bg-muted/50",
+              )}
+            >
+              <span className="sm:hidden">{day.short}</span>
+              <span className="hidden sm:inline">{day.label}</span>
+              {day.value === today && (
+                <span className="bg-azure size-1.5 rounded-full" aria-hidden />
+              )}
+            </button>
           );
         })}
-      </ul>
-      <div
-        className="text-muted-foreground flex pl-16 text-[11px] tabular-nums sm:pl-18"
-        aria-hidden
-      >
-        {[0, 6, 12, 18].map((hour) => (
-          <span key={hour} className="flex-1">
-            {String(hour).padStart(2, "0")}:00
-          </span>
+
+        <div
+          className="bg-card text-muted-foreground sticky left-0 z-20 text-[11px] tabular-nums"
+          style={{ height: dayHeight }}
+          aria-hidden
+        >
+          <div className="relative h-full">
+            {Array.from({ length: 23 }, (_, index) => index + 1).map((hour) => (
+              <span
+                key={hour}
+                className="absolute right-2 -translate-y-1/2"
+                style={{ top: hour * hourHeight }}
+              >
+                {String(hour).padStart(2, "0")}:00
+              </span>
+            ))}
+          </div>
+        </div>
+
+        {columns.map(({ day, segments }) => (
+          <div
+            key={day.value}
+            className={cn(
+              "border-border relative border-l transition-colors",
+              selected.includes(day.value) && "bg-muted/40",
+            )}
+            style={{
+              height: dayHeight,
+              backgroundImage:
+                "linear-gradient(to bottom, var(--border) 1px, transparent 1px)",
+              backgroundSize: `100% ${hourHeight}px`,
+            }}
+          >
+            {segments.map((segment) => {
+              const height = (segment.length / 60) * hourHeight;
+              const roomy = height >= 36;
+              return (
+                <button
+                  key={segment.key}
+                  type="button"
+                  title={`${titleOf(segment.block)} · ${segment.block.start} – ${segment.block.end}`}
+                  aria-label={`${titleOf(segment.block)}, ${segment.block.start} to ${segment.block.end}`}
+                  onClick={() => onPickBlock(day.value, segment.block)}
+                  className={cn(
+                    "focus-visible:ring-ring absolute flex overflow-hidden rounded px-1.5 text-left text-xs leading-tight shadow-xs outline-none hover:brightness-110 focus-visible:ring-2",
+                    roomy ? "flex-col justify-start py-1" : "items-center",
+                  )}
+                  style={{
+                    ...fill(segment.block.color),
+                    top: (segment.from / 60) * hourHeight + 1,
+                    height: Math.max(height - 2, 14),
+                    left: `calc(${(segment.lane / segment.lanes) * 100}% + 2px)`,
+                    width: `calc(${100 / segment.lanes}% - 4px)`,
+                  }}
+                >
+                  <span className="flex w-full min-w-0 items-center gap-1">
+                    {segment.block.emoji && (
+                      <span className="shrink-0 text-sm leading-none">
+                        {segment.block.emoji}
+                      </span>
+                    )}
+                    {segment.block.label && (
+                      <span className="truncate font-medium">
+                        {segment.block.label}
+                      </span>
+                    )}
+                  </span>
+                  {roomy && (
+                    <span className="mt-0.5 truncate tabular-nums opacity-80">
+                      {segment.block.start} – {segment.block.end}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         ))}
-        <span>24:00</span>
       </div>
     </div>
   );

@@ -4,9 +4,7 @@ import { db } from "@/db";
 import { dayBlock } from "@/db/schema";
 import { serializeDayBlock } from "@/lib/data";
 import { requireUserId } from "@/lib/session";
-import { dayBlockInput } from "@/lib/validation";
-
-const updateSchema = dayBlockInput.partial();
+import { dayBlockUpdate as updateSchema } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
