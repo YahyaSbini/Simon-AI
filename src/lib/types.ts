@@ -31,7 +31,18 @@ export type TimeSectionEntry = {
 export type TimeSectionItem = {
   id: string;
   title: string;
+  collapsed: boolean;
   items: TimeSectionEntry[];
+};
+
+export type ActivityGroupItem = {
+  id: string;
+  kind: "investment" | "hobby";
+  /** The main activity of an investment; null for hobbies. */
+  activityId: string | null;
+  name: string | null;
+  emoji: string | null;
+  members: { id: string; activityId: string }[];
 };
 
 export type CategoryItem = {

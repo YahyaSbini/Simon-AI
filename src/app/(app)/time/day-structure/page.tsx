@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { DayStructureView } from "@/components/day-structure-view";
+import { getActivityGroups } from "@/lib/activity-groups";
 import { getCalendarWeek } from "@/lib/calendar";
 import { getActivities, getDayBlocks } from "@/lib/data";
 import { isoWeekday } from "@/lib/day-structure";
@@ -15,11 +16,19 @@ export default async function DayStructurePage() {
 
   const timeZone = await getTimeZone();
   const today = todayIn(timeZone);
-  const [blocks, activities, week] = await Promise.all([
+  const [blocks, activities, week, investments] = await Promise.all([
     getDayBlocks(session.user.id),
     getActivities(session.user.id),
     getCalendarWeek(session.user.id, today, timeZone),
+    getActivityGroups(session.user.id, "investment"),
   ]);
+  const alsoDuring = Object.fromEntries(
+    investments.flatMap((group) =>
+      group.activityId
+        ? [[group.activityId, group.members.map((m) => m.activityId)]]
+        : [],
+    ),
+  );
 
   return (
     <div className="space-y-6">
@@ -33,6 +42,7 @@ export default async function DayStructurePage() {
       <DayStructureView
         initialBlocks={blocks}
         activities={activities}
+        alsoDuring={alsoDuring}
         today={isoWeekday(today)}
         week={week}
       />

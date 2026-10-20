@@ -4,6 +4,7 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
+  ChevronRight,
   Pencil,
   Plus,
   Trash2,
@@ -190,51 +191,93 @@ export function RulesView({
     }
   }
 
+  async function setCollapsed(ids: string[], collapsed: boolean) {
+    const previous = latest.current;
+    setSections((current) =>
+      current.map((section) =>
+        ids.includes(section.id) ? { ...section, collapsed } : section,
+      ),
+    );
+    const results = await Promise.all(
+      ids.map((id) => send(`/api/time-sections/${id}`, "PATCH", { collapsed })),
+    );
+    if (results.some((result) => !result)) {
+      toast.error("Couldn't save which sections are open.");
+      setSections(previous);
+    }
+  }
+
+  const anyOpen = sections.some((section) => !section.collapsed);
+
   return (
-    <div className="space-y-10">
-      {sections.length === 0 && (
-        <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
-          <span>Start with a section:</span>
-          {starters.map((title) => (
-            <Button
-              key={title}
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => addSection(title)}
-            >
-              <Plus data-icon="inline-start" />
-              {title}
-            </Button>
-          ))}
+    <div className="space-y-4">
+      {sections.length > 1 && (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() =>
+              setCollapsed(
+                sections
+                  .filter((section) => section.collapsed !== anyOpen)
+                  .map((section) => section.id),
+                anyOpen,
+              )
+            }
+          >
+            {anyOpen ? "Collapse all" : "Expand all"}
+          </Button>
         </div>
       )}
 
-      {sections.map((section, index) => (
-        <Section
-          key={section.id}
-          section={section}
-          first={index === 0}
-          last={index === sections.length - 1}
-          onRename={(title) => renameSection(section, title)}
-          onRemove={() => removeSection(section)}
-          onMove={(offset) => moveSection(index, offset)}
-          onAddItem={(text) => addItem(section, text)}
-          onEditItem={(item, text) => editItem(section, item, text)}
-          onRemoveItem={(item) => removeItem(section, item)}
-          onMoveItem={(itemIndex, offset) =>
-            moveItem(section, itemIndex, offset)
-          }
-        />
-      ))}
+      <div className="space-y-10">
+        {sections.length === 0 && (
+          <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-sm">
+            <span>Start with a section:</span>
+            {starters.map((title) => (
+              <Button
+                key={title}
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => addSection(title)}
+              >
+                <Plus data-icon="inline-start" />
+                {title}
+              </Button>
+            ))}
+          </div>
+        )}
 
-      <TextForm
-        placeholder="New section, e.g. Priorities"
-        label="Section title"
-        submitLabel="Add section"
-        maxLength={80}
-        onSubmit={addSection}
-      />
+        {sections.map((section, index) => (
+          <Section
+            key={section.id}
+            section={section}
+            first={index === 0}
+            last={index === sections.length - 1}
+            onToggle={() => setCollapsed([section.id], !section.collapsed)}
+            onRename={(title) => renameSection(section, title)}
+            onRemove={() => removeSection(section)}
+            onMove={(offset) => moveSection(index, offset)}
+            onAddItem={(text) => addItem(section, text)}
+            onEditItem={(item, text) => editItem(section, item, text)}
+            onRemoveItem={(item) => removeItem(section, item)}
+            onMoveItem={(itemIndex, offset) =>
+              moveItem(section, itemIndex, offset)
+            }
+          />
+        ))}
+
+        <TextForm
+          placeholder="New section, e.g. Priorities"
+          label="Section title"
+          submitLabel="Add section"
+          maxLength={80}
+          onSubmit={addSection}
+        />
+      </div>
     </div>
   );
 }
@@ -243,6 +286,7 @@ function Section({
   section,
   first,
   last,
+  onToggle,
   onRename,
   onRemove,
   onMove,
@@ -254,6 +298,7 @@ function Section({
   section: TimeSectionItem;
   first: boolean;
   last: boolean;
+  onToggle: () => void;
   onRename: (title: string) => Promise<boolean>;
   onRemove: () => void;
   onMove: (offset: number) => void;
@@ -281,8 +326,28 @@ function Section({
         />
       ) : (
         <div className="group/head border-border flex items-center gap-2 border-b pb-2">
-          <h2 className="font-heading min-w-0 flex-1 truncate text-xl">
-            {section.title}
+          <h2 className="font-heading min-w-0 flex-1 text-xl">
+            <button
+              type="button"
+              aria-expanded={!section.collapsed}
+              aria-controls={`section-${section.id}`}
+              onClick={onToggle}
+              className="focus-visible:ring-ring -ml-1 flex w-full min-w-0 items-center gap-1.5 rounded-md px-1 text-left outline-none focus-visible:ring-2"
+            >
+              <ChevronRight
+                className={cn(
+                  "text-muted-foreground size-4 shrink-0 transition-transform duration-200 ease-out motion-reduce:transition-none",
+                  !section.collapsed && "rotate-90",
+                )}
+                aria-hidden
+              />
+              <span className="truncate">{section.title}</span>
+              {section.collapsed && (
+                <span className="text-muted-foreground shrink-0 font-sans text-sm tabular-nums">
+                  {section.items.length}
+                </span>
+              )}
+            </button>
           </h2>
           <RowActions
             name={section.title}
@@ -296,58 +361,71 @@ function Section({
         </div>
       )}
 
-      {section.items.length > 0 && (
-        <ul className="flex flex-col">
-          {section.items.map((item, index) =>
-            editingId === item.id ? (
-              <li key={item.id} className="py-1">
-                <EditForm
-                  initial={item.text}
-                  label="Item"
-                  maxLength={500}
-                  onCancel={() => setEditingId(null)}
-                  onSubmit={async (text) => {
-                    const ok = await onEditItem(item, text);
-                    if (ok) setEditingId(null);
-                    return ok;
-                  }}
-                />
-              </li>
-            ) : (
-              <li
-                key={item.id}
-                className="group/row hover:bg-muted/50 focus-within:bg-muted/50 -mx-2 flex items-start gap-3 rounded-md px-2 py-2 transition-colors duration-150"
-              >
-                <span
-                  className="bg-wood/70 mt-2.5 size-1.5 shrink-0 rounded-full"
-                  aria-hidden
-                />
-                <span className="min-w-0 flex-1 text-[15px] leading-relaxed break-words">
-                  {item.text}
-                </span>
-                <RowActions
-                  name={item.text}
-                  first={index === 0}
-                  last={index === section.items.length - 1}
-                  group="row"
-                  onEdit={() => setEditingId(item.id)}
-                  onMove={(offset) => onMoveItem(index, offset)}
-                  onRemove={() => onRemoveItem(item)}
-                />
-              </li>
-            ),
+      <div
+        id={`section-${section.id}`}
+        inert={section.collapsed}
+        className={cn(
+          "grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
+          section.collapsed
+            ? "grid-rows-[0fr] opacity-0"
+            : "grid-rows-[1fr] opacity-100",
+        )}
+      >
+        <div className="min-h-0 space-y-2 overflow-hidden">
+          {section.items.length > 0 && (
+            <ul className="flex flex-col">
+              {section.items.map((item, index) =>
+                editingId === item.id ? (
+                  <li key={item.id} className="py-1">
+                    <EditForm
+                      initial={item.text}
+                      label="Item"
+                      maxLength={500}
+                      onCancel={() => setEditingId(null)}
+                      onSubmit={async (text) => {
+                        const ok = await onEditItem(item, text);
+                        if (ok) setEditingId(null);
+                        return ok;
+                      }}
+                    />
+                  </li>
+                ) : (
+                  <li
+                    key={item.id}
+                    className="group/row hover:bg-muted/50 focus-within:bg-muted/50 -mx-2 flex items-start gap-3 rounded-md px-2 py-2 transition-colors duration-150"
+                  >
+                    <span
+                      className="bg-wood/70 mt-2.5 size-1.5 shrink-0 rounded-full"
+                      aria-hidden
+                    />
+                    <span className="min-w-0 flex-1 text-[15px] leading-relaxed break-words">
+                      {item.text}
+                    </span>
+                    <RowActions
+                      name={item.text}
+                      first={index === 0}
+                      last={index === section.items.length - 1}
+                      group="row"
+                      onEdit={() => setEditingId(item.id)}
+                      onMove={(offset) => onMoveItem(index, offset)}
+                      onRemove={() => onRemoveItem(item)}
+                    />
+                  </li>
+                ),
+              )}
+            </ul>
           )}
-        </ul>
-      )}
 
-      <TextForm
-        placeholder={`Add to ${section.title}`}
-        label={`New item in ${section.title}`}
-        submitLabel="Add"
-        maxLength={500}
-        quiet
-        onSubmit={onAddItem}
-      />
+          <TextForm
+            placeholder={`Add to ${section.title}`}
+            label={`New item in ${section.title}`}
+            submitLabel="Add"
+            maxLength={500}
+            quiet
+            onSubmit={onAddItem}
+          />
+        </div>
+      </div>
     </section>
   );
 }

@@ -87,11 +87,14 @@ type Composer =
 export function DayStructureView({
   initialBlocks,
   activities,
+  alsoDuring,
   today,
   week,
 }: {
   initialBlocks: DayBlockItem[];
   activities: ActivityItem[];
+  /** Activity id → ids of activities attached to it in Time Investment. */
+  alsoDuring: Record<string, string[]>;
   today: number;
   week: CalendarWeek;
 }) {
@@ -256,6 +259,7 @@ export function DayStructureView({
             </DialogHeader>
             <BlockForm
               activities={activities}
+              alsoDuring={alsoDuring}
               initial={
                 composer.mode === "new"
                   ? {
@@ -363,6 +367,7 @@ export function DayStructureView({
                 <li key={slot.block.id} className="py-1">
                   <BlockForm
                     activities={activities}
+                    alsoDuring={alsoDuring}
                     current={slot.block}
                     initial={draftOf(slot.block)}
                     submitLabel="Save"
@@ -438,6 +443,7 @@ export function DayStructureView({
           <BlockForm
             key={`${day}-${nextStart(visible)}`}
             activities={activities}
+            alsoDuring={alsoDuring}
             initial={{
               weekdays: [day],
               start: nextStart(visible),
@@ -478,6 +484,7 @@ function nextEnd(blocks: DayBlockItem[]): string {
 
 function BlockForm({
   activities,
+  alsoDuring,
   current,
   initial,
   submitLabel,
@@ -490,6 +497,7 @@ function BlockForm({
   extra,
 }: {
   activities: ActivityItem[];
+  alsoDuring: Record<string, string[]>;
   /** The block being edited, shown while it isn't linked to an activity. */
   current?: DayBlockItem;
   initial: Draft;
@@ -508,6 +516,9 @@ function BlockForm({
     autoFocus && !initial.activityId ? "activity" : null,
   );
   const chosen = activities.find((item) => item.id === draft.activityId);
+  const attached = (chosen ? (alsoDuring[chosen.id] ?? []) : [])
+    .map((id) => activities.find((item) => item.id === id))
+    .filter((item) => item !== undefined);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -631,6 +642,14 @@ function BlockForm({
           )}
         </Button>
       </div>
+      {attached.length > 0 && (
+        <p className="text-muted-foreground basis-full text-sm">
+          Also during this:{" "}
+          {attached
+            .map((item) => titleOf({ ...item, label: item.name }))
+            .join(", ")}
+        </p>
+      )}
       {panel === "activity" && (
         <ActivityPicker
           activities={activities}

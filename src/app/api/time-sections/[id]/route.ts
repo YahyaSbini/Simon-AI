@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { timeSection } from "@/db/schema";
 import { requireUserId } from "@/lib/session";
-import { timeSectionInput } from "@/lib/validation";
+import { timeSectionUpdate } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -14,7 +14,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const parsed = timeSectionInput.safeParse(await request.json());
+  const parsed = timeSectionUpdate.safeParse(await request.json());
 
   if (!parsed.success) {
     return NextResponse.json(
@@ -28,7 +28,11 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     .update(timeSection)
     .set({ ...parsed.data, updatedAt: new Date() })
     .where(and(eq(timeSection.id, id), eq(timeSection.userId, userId)))
-    .returning({ id: timeSection.id, title: timeSection.title });
+    .returning({
+      id: timeSection.id,
+      title: timeSection.title,
+      collapsed: timeSection.collapsed,
+    });
 
   if (!updated) {
     return NextResponse.json({ error: "Section not found." }, { status: 404 });

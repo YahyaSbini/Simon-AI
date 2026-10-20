@@ -396,6 +396,7 @@ export async function getTimeSections(
   return sections.map((section) => ({
     id: section.id,
     title: section.title,
+    collapsed: section.collapsed,
     items: items
       .filter((item) => item.sectionId === section.id)
       .map((item) => ({ id: item.id, text: item.text })),
