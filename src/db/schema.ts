@@ -242,6 +242,24 @@ export const calendarEventCompletion = pgTable(
 );
 
 /** A block of the user's standard week: "10:00–11:00 Work" on the given weekdays. */
+/** A reusable kind of block, e.g. Sleep or Work; day blocks are placed from these. */
+export const activity = pgTable(
+  "activity",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    emoji: text("emoji"),
+    color: text("color"),
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("activity_user_id_idx").on(t.userId)],
+);
+
 export const dayBlock = pgTable(
   "day_block",
   {
@@ -258,10 +276,15 @@ export const dayBlock = pgTable(
     label: text("label").notNull(),
     emoji: text("emoji"),
     color: text("color"),
+    /** Label, emoji and color are copied from this activity and kept in sync. */
+    activityId: uuid("activity_id").references(() => activity.id),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
-  (t) => [index("day_block_user_id_idx").on(t.userId)],
+  (t) => [
+    index("day_block_user_id_idx").on(t.userId),
+    index("day_block_activity_id_idx").on(t.activityId),
+  ],
 );
 
 /** A user-named group of time rules, e.g. "Constraints" or "Rules". */
@@ -395,6 +418,7 @@ export const savingsGoal = pgTable(
 
 export type List = typeof list.$inferSelect;
 export type DayBlock = typeof dayBlock.$inferSelect;
+export type Activity = typeof activity.$inferSelect;
 export type TimeSection = typeof timeSection.$inferSelect;
 export type TimeSectionItemRow = typeof timeSectionItem.$inferSelect;
 export type Task = typeof task.$inferSelect;

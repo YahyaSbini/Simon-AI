@@ -84,7 +84,7 @@ export async function reorderItems(
   return true;
 }
 
-function sameIds(rows: { id: string }[], ids: string[]): boolean {
+export function sameIds(rows: { id: string }[], ids: string[]): boolean {
   const unique = new Set(ids);
   return (
     unique.size === ids.length &&

@@ -3,13 +3,14 @@
 import {
   CalendarDays,
   Check,
+  ChevronDown,
   Copy,
   Pencil,
   Plus,
-  Smile,
   Trash2,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -19,13 +20,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { fill } from "@/components/activity-fields";
 import { Input } from "@/components/ui/input";
-import {
-  asBlockColor,
-  type BlockColor,
-  blockColors,
-  textOn,
-} from "@/lib/block-colors";
 import {
   blocksOn,
   durationOf,
@@ -35,21 +31,13 @@ import {
   toMinutes,
   weekdays,
 } from "@/lib/day-structure";
-import type { CalendarWeek, DayBlockItem, WeekEvent } from "@/lib/types";
+import type {
+  ActivityItem,
+  CalendarWeek,
+  DayBlockItem,
+  WeekEvent,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { dayBlockColors } from "@/lib/validation";
-
-type Color = BlockColor;
-
-const emojiChoices = (
-  "😴 💤 🌙 ☀️ 💼 💻 🏢 📞 📚 📖 ✍️ 🎓 🧠 🏋️ 🏃 ⚽ 🧘 🕌 🙏 🍳 " +
-  "🍽️ ☕ 🚿 🧹 🛒 🚗 ✈️ 🏠 👨‍👩‍👧 💬 🎮 📺 🎵 🎨 🛠️ 🌳 🐾 🩺 💊 💰"
-).split(" ");
-
-function fill(color: string | null): React.CSSProperties {
-  const key = asBlockColor(color);
-  return { backgroundColor: blockColors[key], color: textOn(key) };
-}
 
 function titleOf(block: Pick<DayBlockItem, "emoji" | "label">): string {
   return [block.emoji, block.label].filter(Boolean).join(" ");
@@ -59,9 +47,7 @@ type Draft = {
   weekdays: number[];
   start: string;
   end: string;
-  label: string;
-  emoji: string | null;
-  color: Color;
+  activityId: string | null;
 };
 
 const presets = {
@@ -100,10 +86,12 @@ type Composer =
 
 export function DayStructureView({
   initialBlocks,
+  activities,
   today,
   week,
 }: {
   initialBlocks: DayBlockItem[];
+  activities: ActivityItem[];
   today: number;
   week: CalendarWeek;
 }) {
@@ -145,11 +133,15 @@ export function DayStructureView({
     return true;
   }
 
-  async function updateBlock(id: string, patch: Partial<DayBlockItem>) {
+  async function updateBlock(id: string, patch: Partial<Draft>) {
     const previous = latest.current.find((block) => block.id === id);
+    const source = activities.find((item) => item.id === patch.activityId);
+    const linked = source
+      ? { label: source.name, emoji: source.emoji, color: source.color }
+      : {};
     setBlocks((current) =>
       current.map((block) =>
-        block.id === id ? { ...block, ...patch } : block,
+        block.id === id ? { ...block, ...patch, ...linked } : block,
       ),
     );
 
@@ -263,18 +255,18 @@ export function DayStructureView({
               </DialogTitle>
             </DialogHeader>
             <BlockForm
+              activities={activities}
               initial={
                 composer.mode === "new"
                   ? {
                       weekdays: [composer.range.day],
                       start: fromMinutes(composer.range.from),
                       end: fromMinutes(composer.range.to),
-                      label: "",
-                      emoji: null,
-                      color: "azure",
+                      activityId: null,
                     }
                   : draftOf(composer.block)
               }
+              current={composer.mode === "edit" ? composer.block : undefined}
               submitLabel={composer.mode === "new" ? "Add block" : "Save"}
               saving={saving}
               autoFocus
@@ -370,6 +362,8 @@ export function DayStructureView({
               ) : editingId === slot.block.id ? (
                 <li key={slot.block.id} className="py-1">
                   <BlockForm
+                    activities={activities}
+                    current={slot.block}
                     initial={draftOf(slot.block)}
                     submitLabel="Save"
                     compact
@@ -443,13 +437,12 @@ export function DayStructureView({
         <div className="pt-2">
           <BlockForm
             key={`${day}-${nextStart(visible)}`}
+            activities={activities}
             initial={{
               weekdays: [day],
               start: nextStart(visible),
               end: nextEnd(visible),
-              label: "",
-              emoji: null,
-              color: "azure",
+              activityId: null,
             }}
             submitLabel="Add block"
             saving={saving}
@@ -467,9 +460,7 @@ function draftOf(block: DayBlockItem): Draft {
     weekdays: block.weekdays,
     start: block.start,
     end: block.end,
-    label: block.label,
-    emoji: block.emoji,
-    color: asBlockColor(block.color),
+    activityId: block.activityId,
   };
 }
 
@@ -486,6 +477,8 @@ function nextEnd(blocks: DayBlockItem[]): string {
 }
 
 function BlockForm({
+  activities,
+  current,
   initial,
   submitLabel,
   saving = false,
@@ -496,6 +489,9 @@ function BlockForm({
   onCancel,
   extra,
 }: {
+  activities: ActivityItem[];
+  /** The block being edited, shown while it isn't linked to an activity. */
+  current?: DayBlockItem;
   initial: Draft;
   submitLabel: string;
   saving?: boolean;
@@ -508,29 +504,31 @@ function BlockForm({
   extra?: React.ReactNode;
 }) {
   const [draft, setDraft] = useState<Draft>(initial);
-  const [panel, setPanel] = useState<"emoji" | "days" | null>(null);
+  const [panel, setPanel] = useState<"activity" | "days" | null>(
+    autoFocus && !initial.activityId ? "activity" : null,
+  );
+  const chosen = activities.find((item) => item.id === draft.activityId);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const label = draft.label.trim();
-    const emoji = draft.emoji?.trim() || null;
-    if (!label && !emoji) {
-      toast.error("Give the block a name or an emoji.");
+    if (!chosen) {
+      toast.error("Choose an activity.");
+      setPanel("activity");
       return;
     }
     if (draft.start === draft.end) {
       toast.error("Start and end can't be the same time.");
       return;
     }
-    const ok = await onSubmit({ ...draft, label, emoji });
+    const ok = await onSubmit(draft);
     if (ok && resetOnSubmit) {
-      setDraft({ ...draft, label: "", emoji: null });
+      setDraft({ ...draft, activityId: null });
       setPanel(null);
     }
   }
 
-  function pickEmoji(emoji: string | null) {
-    setDraft({ ...draft, emoji });
+  function pickActivity(activityId: string) {
+    setDraft({ ...draft, activityId });
     setPanel(null);
   }
 
@@ -574,63 +572,36 @@ function BlockForm({
           className="w-[7.5rem] tabular-nums"
         />
       </div>
-      <div className="flex min-w-48 flex-1 items-center gap-1.5">
-        <Button
-          type="button"
-          variant="outline"
-          size="icon"
-          aria-label={draft.emoji ? `Emoji ${draft.emoji}` : "Add an emoji"}
-          aria-expanded={panel === "emoji"}
-          onClick={() =>
-            setPanel((value) => (value === "emoji" ? null : "emoji"))
-          }
-          className="shrink-0 text-base"
-        >
-          {draft.emoji ? (
-            <span aria-hidden>{draft.emoji}</span>
-          ) : (
-            <Smile className="text-muted-foreground" />
-          )}
-        </Button>
-        <Input
-          value={draft.label}
-          onChange={(event) =>
-            setDraft({ ...draft, label: event.target.value })
-          }
-          placeholder="What happens then? e.g. Work, Gym, Sleep"
-          aria-label="Block name"
-          maxLength={80}
-          autoFocus={autoFocus}
-          className="min-w-0 flex-1"
-        />
-      </div>
-      <div
-        className="flex flex-wrap items-center"
-        role="radiogroup"
-        aria-label="Color"
+      <Button
+        type="button"
+        variant="outline"
+        aria-label={`Activity: ${chosen ? chosen.name : "none"}`}
+        aria-expanded={panel === "activity"}
+        onClick={() =>
+          setPanel((value) => (value === "activity" ? null : "activity"))
+        }
+        className="min-w-48 flex-1 justify-start"
       >
-        {dayBlockColors.map((color) => (
-          <button
-            key={color}
-            type="button"
-            role="radio"
-            aria-checked={draft.color === color}
-            aria-label={color}
-            title={color}
-            onClick={() => setDraft({ ...draft, color })}
-            className="focus-visible:ring-ring flex size-6 items-center justify-center rounded-full outline-none focus-visible:ring-2"
-          >
+        {chosen ? (
+          <>
             <span
-              className={cn(
-                "size-3.5 rounded-full transition-transform",
-                draft.color === color &&
-                  "ring-foreground/60 ring-offset-background scale-125 ring-2 ring-offset-1",
-              )}
-              style={{ backgroundColor: blockColors[color] }}
+              className="size-2.5 shrink-0 rounded-full"
+              style={fill(chosen.color)}
+              aria-hidden
             />
-          </button>
-        ))}
-      </div>
+            <span className="truncate">
+              {titleOf({ ...chosen, label: chosen.name })}
+            </span>
+          </>
+        ) : (
+          <span className="text-muted-foreground truncate">
+            {current && !current.activityId
+              ? `${titleOf(current)} · choose an activity`
+              : "Choose an activity"}
+          </span>
+        )}
+        <ChevronDown className="text-muted-foreground ml-auto" />
+      </Button>
       <div className="flex flex-1 items-center justify-end gap-1">
         {extra && <div className="mr-auto">{extra}</div>}
         {onCancel && (
@@ -660,11 +631,11 @@ function BlockForm({
           )}
         </Button>
       </div>
-      {panel === "emoji" && (
-        <EmojiPicker
-          value={draft.emoji}
-          onPick={pickEmoji}
-          onClose={() => setPanel(null)}
+      {panel === "activity" && (
+        <ActivityPicker
+          activities={activities}
+          value={draft.activityId}
+          onPick={pickActivity}
         />
       )}
       {panel === "days" && (
@@ -677,80 +648,62 @@ function BlockForm({
   );
 }
 
-function EmojiPicker({
+function ActivityPicker({
+  activities,
   value,
   onPick,
-  onClose,
 }: {
+  activities: ActivityItem[];
   value: string | null;
-  onPick: (emoji: string | null) => void;
-  onClose: () => void;
+  onPick: (id: string) => void;
 }) {
-  const [custom, setCustom] = useState("");
-
   return (
-    <div
-      className="border-border bg-card animate-in fade-in-0 slide-in-from-top-1 basis-full space-y-2 rounded-md border p-2 duration-150"
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.stopPropagation();
-          onClose();
-        }
-      }}
-    >
-      <div className="grid grid-cols-8 gap-0.5 sm:grid-cols-[repeat(20,minmax(0,1fr))]">
-        {emojiChoices.map((emoji) => (
-          <button
-            key={emoji}
-            type="button"
-            aria-label={emoji}
-            aria-pressed={value === emoji}
-            onClick={() => onPick(emoji)}
-            className={cn(
-              "hover:bg-muted focus-visible:ring-ring flex h-9 items-center justify-center rounded-md text-lg transition-colors outline-none focus-visible:ring-2",
-              value === emoji && "bg-muted",
-            )}
+    <div className="border-border bg-card animate-in fade-in-0 slide-in-from-top-1 basis-full space-y-2 rounded-md border p-2 duration-150">
+      {activities.length === 0 ? (
+        <p className="text-muted-foreground px-1 py-2 text-sm">
+          No activities yet.{" "}
+          <Link
+            href="/time/activities"
+            className="text-foreground underline underline-offset-4"
           >
-            {emoji}
-          </button>
-        ))}
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          value={custom}
-          onChange={(event) => setCustom(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              if (custom.trim()) onPick(custom.trim());
-            }
-          }}
-          placeholder="Or type / paste any emoji"
-          aria-label="Custom emoji"
-          maxLength={16}
-          className="w-52"
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={!custom.trim()}
-          onClick={() => onPick(custom.trim())}
-        >
-          Use
-        </Button>
-        {value && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground ml-auto"
-            onClick={() => onPick(null)}
+            Add your activities
+          </Link>{" "}
+          first, then place them here.
+        </p>
+      ) : (
+        <>
+          <div
+            className="flex flex-wrap gap-1"
+            role="group"
+            aria-label="Activities"
           >
-            No emoji
-          </Button>
-        )}
-      </div>
+            {activities.map((item) => (
+              <Button
+                key={item.id}
+                type="button"
+                variant={value === item.id ? "secondary" : "ghost"}
+                size="sm"
+                aria-pressed={value === item.id}
+                onClick={() => onPick(item.id)}
+                className={cn(value === item.id && "ring-ring/40 ring-1")}
+              >
+                <span
+                  className="size-2.5 shrink-0 rounded-full"
+                  style={fill(item.color)}
+                  aria-hidden
+                />
+                {titleOf({ ...item, label: item.name })}
+              </Button>
+            ))}
+          </div>
+          <Link
+            href="/time/activities"
+            className="text-muted-foreground hover:text-foreground inline-block px-1 text-xs underline-offset-4 hover:underline"
+          >
+            Manage activities
+          </Link>
+        </>
+      )}
     </div>
   );
 }

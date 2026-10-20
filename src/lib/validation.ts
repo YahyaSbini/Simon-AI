@@ -76,17 +76,20 @@ const dayBlockFields = z.object({
   weekdays: z.array(z.number().int().min(1).max(7)).min(1).max(7),
   start: z.string().regex(/^\d{2}:\d{2}$/),
   end: z.string().regex(/^\d{2}:\d{2}$/),
-  label: z.string().trim().max(80),
-  emoji: z.string().trim().max(16).nullish(),
-  color: z.enum(dayBlockColors).nullish(),
+  activityId: z.string().uuid(),
 });
 
-export const dayBlockInput = dayBlockFields.refine(
-  (block) => Boolean(block.label || block.emoji),
-  { message: "Give the block a name or an emoji." },
-);
+export const dayBlockInput = dayBlockFields;
 
 export const dayBlockUpdate = dayBlockFields.partial();
+
+export const activityInput = z.object({
+  name: z.string().trim().min(1).max(80),
+  emoji: z.string().trim().max(16).nullish(),
+  color: z.enum(dayBlockColors),
+});
+
+export const activityUpdate = activityInput.partial();
 
 export const timeSectionInput = z.object({
   title: z.string().trim().min(1).max(80),
