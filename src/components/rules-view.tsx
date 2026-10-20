@@ -4,7 +4,6 @@ import {
   ArrowDown,
   ArrowUp,
   Check,
-  ChevronRight,
   Pencil,
   Plus,
   Trash2,
@@ -12,6 +11,11 @@ import {
 } from "lucide-react";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import {
+  CollapseAllButton,
+  CollapseBody,
+  CollapseToggle,
+} from "@/components/collapsible";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { TimeSectionEntry, TimeSectionItem } from "@/lib/types";
@@ -212,24 +216,17 @@ export function RulesView({
   return (
     <div className="space-y-4">
       {sections.length > 1 && (
-        <div className="flex justify-end">
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            className="text-muted-foreground"
-            onClick={() =>
-              setCollapsed(
-                sections
-                  .filter((section) => section.collapsed !== anyOpen)
-                  .map((section) => section.id),
-                anyOpen,
-              )
-            }
-          >
-            {anyOpen ? "Collapse all" : "Expand all"}
-          </Button>
-        </div>
+        <CollapseAllButton
+          anyOpen={anyOpen}
+          onClick={(open) =>
+            setCollapsed(
+              sections
+                .filter((section) => section.collapsed === open)
+                .map((section) => section.id),
+              !open,
+            )
+          }
+        />
       )}
 
       <div className="space-y-10">
@@ -327,27 +324,14 @@ function Section({
       ) : (
         <div className="group/head border-border flex items-center gap-2 border-b pb-2">
           <h2 className="font-heading min-w-0 flex-1 text-xl">
-            <button
-              type="button"
-              aria-expanded={!section.collapsed}
-              aria-controls={`section-${section.id}`}
-              onClick={onToggle}
-              className="focus-visible:ring-ring -ml-1 flex w-full min-w-0 items-center gap-1.5 rounded-md px-1 text-left outline-none focus-visible:ring-2"
+            <CollapseToggle
+              open={!section.collapsed}
+              controls={`section-${section.id}`}
+              count={section.items.length}
+              onToggle={onToggle}
             >
-              <ChevronRight
-                className={cn(
-                  "text-muted-foreground size-4 shrink-0 transition-transform duration-200 ease-out motion-reduce:transition-none",
-                  !section.collapsed && "rotate-90",
-                )}
-                aria-hidden
-              />
               <span className="truncate">{section.title}</span>
-              {section.collapsed && (
-                <span className="text-muted-foreground shrink-0 font-sans text-sm tabular-nums">
-                  {section.items.length}
-                </span>
-              )}
-            </button>
+            </CollapseToggle>
           </h2>
           <RowActions
             name={section.title}
@@ -361,71 +345,64 @@ function Section({
         </div>
       )}
 
-      <div
+      <CollapseBody
         id={`section-${section.id}`}
-        inert={section.collapsed}
-        className={cn(
-          "grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none",
-          section.collapsed
-            ? "grid-rows-[0fr] opacity-0"
-            : "grid-rows-[1fr] opacity-100",
-        )}
+        open={!section.collapsed}
+        className="space-y-2"
       >
-        <div className="min-h-0 space-y-2 overflow-hidden">
-          {section.items.length > 0 && (
-            <ul className="flex flex-col">
-              {section.items.map((item, index) =>
-                editingId === item.id ? (
-                  <li key={item.id} className="py-1">
-                    <EditForm
-                      initial={item.text}
-                      label="Item"
-                      maxLength={500}
-                      onCancel={() => setEditingId(null)}
-                      onSubmit={async (text) => {
-                        const ok = await onEditItem(item, text);
-                        if (ok) setEditingId(null);
-                        return ok;
-                      }}
-                    />
-                  </li>
-                ) : (
-                  <li
-                    key={item.id}
-                    className="group/row hover:bg-muted/50 focus-within:bg-muted/50 -mx-2 flex items-start gap-3 rounded-md px-2 py-2 transition-colors duration-150"
-                  >
-                    <span
-                      className="bg-wood/70 mt-2.5 size-1.5 shrink-0 rounded-full"
-                      aria-hidden
-                    />
-                    <span className="min-w-0 flex-1 text-[15px] leading-relaxed break-words">
-                      {item.text}
-                    </span>
-                    <RowActions
-                      name={item.text}
-                      first={index === 0}
-                      last={index === section.items.length - 1}
-                      group="row"
-                      onEdit={() => setEditingId(item.id)}
-                      onMove={(offset) => onMoveItem(index, offset)}
-                      onRemove={() => onRemoveItem(item)}
-                    />
-                  </li>
-                ),
-              )}
-            </ul>
-          )}
+        {section.items.length > 0 && (
+          <ul className="flex flex-col">
+            {section.items.map((item, index) =>
+              editingId === item.id ? (
+                <li key={item.id} className="py-1">
+                  <EditForm
+                    initial={item.text}
+                    label="Item"
+                    maxLength={500}
+                    onCancel={() => setEditingId(null)}
+                    onSubmit={async (text) => {
+                      const ok = await onEditItem(item, text);
+                      if (ok) setEditingId(null);
+                      return ok;
+                    }}
+                  />
+                </li>
+              ) : (
+                <li
+                  key={item.id}
+                  className="group/row hover:bg-muted/50 focus-within:bg-muted/50 -mx-2 flex items-start gap-3 rounded-md px-2 py-2 transition-colors duration-150"
+                >
+                  <span
+                    className="bg-wood/70 mt-2.5 size-1.5 shrink-0 rounded-full"
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1 text-[15px] leading-relaxed break-words">
+                    {item.text}
+                  </span>
+                  <RowActions
+                    name={item.text}
+                    first={index === 0}
+                    last={index === section.items.length - 1}
+                    group="row"
+                    onEdit={() => setEditingId(item.id)}
+                    onMove={(offset) => onMoveItem(index, offset)}
+                    onRemove={() => onRemoveItem(item)}
+                  />
+                </li>
+              ),
+            )}
+          </ul>
+        )}
 
-          <TextForm
-            placeholder={`Add to ${section.title}`}
-            label={`New item in ${section.title}`}
-            submitLabel="Add"
-            maxLength={500}
-            quiet
-            onSubmit={onAddItem}
-          />
-        </div>
-      </div>
+        <TextForm
+          placeholder={`Add to ${section.title}`}
+          label={`New item in ${section.title}`}
+          submitLabel="Add"
+          maxLength={500}
+          quiet
+          onSubmit={onAddItem}
+        />
+      </CollapseBody>
     </section>
   );
 }
