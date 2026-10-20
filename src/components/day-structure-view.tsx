@@ -21,6 +21,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { fill } from "@/components/activity-fields";
+import {
+  CollapseBody,
+  CollapseToggle,
+  useClosedSections,
+} from "@/components/collapsible";
 import { Input } from "@/components/ui/input";
 import {
   blocksOn,
@@ -203,14 +208,23 @@ export function DayStructureView({
   }
 
   const composing = composer?.mode === "new" ? composer.range : null;
+  const { closed, setOpen } = useClosedSections("time-day-structure-closed");
+  const weekOpen = !closed.has("week");
+  const dayOpen = !closed.has("day");
 
   return (
     <div className="space-y-8">
       <section className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-muted-foreground text-xs tracking-wide uppercase">
-            Week
-          </p>
+          <h2 className="text-muted-foreground text-xs tracking-wide uppercase">
+            <CollapseToggle
+              open={weekOpen}
+              controls="day-structure-week"
+              onToggle={() => setOpen(["week"], !weekOpen)}
+            >
+              Week
+            </CollapseToggle>
+          </h2>
           {week.connected && (
             <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
               {week.failed ? (
@@ -227,23 +241,25 @@ export function DayStructureView({
             </p>
           )}
         </div>
-        <WeekGrid
-          blocks={blocks}
-          events={week.events}
-          dates={week.dates}
-          selected={day}
-          today={today}
-          pending={composing}
-          onSelectDay={selectDay}
-          onPickBlock={(value, block) => {
-            selectDay(value);
-            setComposer({ mode: "edit", block, day: value });
-          }}
-          onCreate={(range) => {
-            selectDay(range.day);
-            setComposer({ mode: "new", range });
-          }}
-        />
+        <CollapseBody id="day-structure-week" open={weekOpen}>
+          <WeekGrid
+            blocks={blocks}
+            events={week.events}
+            dates={week.dates}
+            selected={day}
+            today={today}
+            pending={composing}
+            onSelectDay={selectDay}
+            onPickBlock={(value, block) => {
+              selectDay(value);
+              setComposer({ mode: "edit", block, day: value });
+            }}
+            onCreate={(range) => {
+              selectDay(range.day);
+              setComposer({ mode: "new", range });
+            }}
+          />
+        </CollapseBody>
       </section>
 
       <Dialog
@@ -313,7 +329,14 @@ export function DayStructureView({
         <div className="border-border flex items-end justify-between gap-3 border-b pb-2">
           <div>
             <h2 className="text-muted-foreground text-xs tracking-wide uppercase">
-              {dayName(day)}
+              <CollapseToggle
+                open={dayOpen}
+                controls="day-structure-day"
+                count={visible.length}
+                onToggle={() => setOpen(["day"], !dayOpen)}
+              >
+                {dayName(day)}
+              </CollapseToggle>
             </h2>
             {visible.length > 0 && (
               <p className="text-muted-foreground mt-0.5 text-xs">
@@ -322,7 +345,7 @@ export function DayStructureView({
               </p>
             )}
           </div>
-          {visible.length > 0 && (
+          {dayOpen && visible.length > 0 && (
             <Button
               type="button"
               variant="ghost"
@@ -336,126 +359,132 @@ export function DayStructureView({
           )}
         </div>
 
-        {copying && (
-          <CopyPicker
-            exclude={[day]}
-            saving={saving}
-            onCopy={copyTo}
-            onClose={() => setCopying(false)}
-          />
-        )}
+        <CollapseBody
+          id="day-structure-day"
+          open={dayOpen}
+          className="space-y-3"
+        >
+          {copying && (
+            <CopyPicker
+              exclude={[day]}
+              saving={saving}
+              onCopy={copyTo}
+              onClose={() => setCopying(false)}
+            />
+          )}
 
-        {visible.length === 0 ? (
-          <p className="text-muted-foreground py-6 text-center text-sm">
-            No blocks on {dayName(day)} yet. Click the table or add one below.
-          </p>
-        ) : (
-          <ul className="flex flex-col">
-            {slots.map((slot) =>
-              slot.kind === "gap" ? (
-                <li
-                  key={`gap-${slot.start}`}
-                  className="text-muted-foreground flex items-center gap-3 px-2 py-1 text-xs"
-                >
-                  <span className="w-24 shrink-0 tabular-nums sm:w-28">
-                    {slot.start} – {slot.end}
-                  </span>
-                  <span className="border-border flex-1 border-t border-dashed" />
-                  <span>free · {formatDuration(slot.minutes)}</span>
-                </li>
-              ) : editingId === slot.block.id ? (
-                <li key={slot.block.id} className="py-1">
-                  <BlockForm
-                    activities={activities}
-                    alsoDuring={alsoDuring}
-                    current={slot.block}
-                    initial={draftOf(slot.block)}
-                    submitLabel="Save"
-                    compact
-                    autoFocus
-                    onCancel={() => setEditingId(null)}
-                    onSubmit={async (draft) => {
-                      const ok = await updateBlock(slot.block.id, draft);
-                      if (ok) setEditingId(null);
-                      return ok;
-                    }}
-                  />
-                </li>
-              ) : (
-                <li
-                  key={slot.block.id}
-                  className="group/row hover:bg-muted/50 focus-within:bg-muted/50 -mx-2 flex items-center gap-3 rounded-md px-2 py-2.5 transition-colors duration-150"
-                >
-                  <span
-                    className="size-2.5 shrink-0 rounded-full"
-                    style={fill(slot.block.color)}
-                    aria-hidden
-                  />
-                  <span className="w-[5.5rem] shrink-0 text-sm tabular-nums sm:w-[6.5rem]">
-                    {slot.block.start} – {slot.block.end}
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[15px]">
-                      {titleOf(slot.block)}
+          {visible.length === 0 ? (
+            <p className="text-muted-foreground py-6 text-center text-sm">
+              No blocks on {dayName(day)} yet. Click the table or add one below.
+            </p>
+          ) : (
+            <ul className="flex flex-col">
+              {slots.map((slot) =>
+                slot.kind === "gap" ? (
+                  <li
+                    key={`gap-${slot.start}`}
+                    className="text-muted-foreground flex items-center gap-3 px-2 py-1 text-xs"
+                  >
+                    <span className="w-24 shrink-0 tabular-nums sm:w-28">
+                      {slot.start} – {slot.end}
                     </span>
-                    {slot.block.weekdays.length > 1 && (
-                      <span className="text-muted-foreground block text-xs">
-                        {daysLabel(slot.block.weekdays)}
+                    <span className="border-border flex-1 border-t border-dashed" />
+                    <span>free · {formatDuration(slot.minutes)}</span>
+                  </li>
+                ) : editingId === slot.block.id ? (
+                  <li key={slot.block.id} className="py-1">
+                    <BlockForm
+                      activities={activities}
+                      alsoDuring={alsoDuring}
+                      current={slot.block}
+                      initial={draftOf(slot.block)}
+                      submitLabel="Save"
+                      compact
+                      autoFocus
+                      onCancel={() => setEditingId(null)}
+                      onSubmit={async (draft) => {
+                        const ok = await updateBlock(slot.block.id, draft);
+                        if (ok) setEditingId(null);
+                        return ok;
+                      }}
+                    />
+                  </li>
+                ) : (
+                  <li
+                    key={slot.block.id}
+                    className="group/row hover:bg-muted/50 focus-within:bg-muted/50 -mx-2 flex items-center gap-3 rounded-md px-2 py-2.5 transition-colors duration-150"
+                  >
+                    <span
+                      className="size-2.5 shrink-0 rounded-full"
+                      style={fill(slot.block.color)}
+                      aria-hidden
+                    />
+                    <span className="w-[5.5rem] shrink-0 text-sm tabular-nums sm:w-[6.5rem]">
+                      {slot.block.start} – {slot.block.end}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[15px]">
+                        {titleOf(slot.block)}
+                      </span>
+                      {slot.block.weekdays.length > 1 && (
+                        <span className="text-muted-foreground block text-xs">
+                          {daysLabel(slot.block.weekdays)}
+                        </span>
+                      )}
+                    </span>
+                    {slot.overlaps && (
+                      <span className="text-destructive shrink-0 text-xs">
+                        overlaps
                       </span>
                     )}
-                  </span>
-                  {slot.overlaps && (
-                    <span className="text-destructive shrink-0 text-xs">
-                      overlaps
+                    <span className="text-muted-foreground hidden w-14 shrink-0 text-right text-xs tabular-nums sm:block">
+                      {formatDuration(durationOf(slot.block))}
                     </span>
-                  )}
-                  <span className="text-muted-foreground hidden w-14 shrink-0 text-right text-xs tabular-nums sm:block">
-                    {formatDuration(durationOf(slot.block))}
-                  </span>
-                  <span className="flex shrink-0 items-center opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 max-md:opacity-100">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Edit ${titleOf(slot.block)}`}
-                      onClick={() => setEditingId(slot.block.id)}
-                    >
-                      <Pencil />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      className="hover:text-destructive"
-                      aria-label={`Remove ${titleOf(slot.block)}`}
-                      onClick={() => removeBlock(slot.block, day)}
-                    >
-                      <Trash2 />
-                    </Button>
-                  </span>
-                </li>
-              ),
-            )}
-          </ul>
-        )}
+                    <span className="flex shrink-0 items-center opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 max-md:opacity-100">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        aria-label={`Edit ${titleOf(slot.block)}`}
+                        onClick={() => setEditingId(slot.block.id)}
+                      >
+                        <Pencil />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="hover:text-destructive"
+                        aria-label={`Remove ${titleOf(slot.block)}`}
+                        onClick={() => removeBlock(slot.block, day)}
+                      >
+                        <Trash2 />
+                      </Button>
+                    </span>
+                  </li>
+                ),
+              )}
+            </ul>
+          )}
 
-        <div className="pt-2">
-          <BlockForm
-            key={`${day}-${nextStart(visible)}`}
-            activities={activities}
-            alsoDuring={alsoDuring}
-            initial={{
-              weekdays: [day],
-              start: nextStart(visible),
-              end: nextEnd(visible),
-              activityId: null,
-            }}
-            submitLabel="Add block"
-            saving={saving}
-            resetOnSubmit
-            onSubmit={createBlock}
-          />
-        </div>
+          <div className="pt-2">
+            <BlockForm
+              key={`${day}-${nextStart(visible)}`}
+              activities={activities}
+              alsoDuring={alsoDuring}
+              initial={{
+                weekdays: [day],
+                start: nextStart(visible),
+                end: nextEnd(visible),
+                activityId: null,
+              }}
+              submitLabel="Add block"
+              saving={saving}
+              resetOnSubmit
+              onSubmit={createBlock}
+            />
+          </div>
+        </CollapseBody>
       </section>
     </div>
   );

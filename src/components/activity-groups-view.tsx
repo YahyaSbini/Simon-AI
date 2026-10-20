@@ -14,6 +14,12 @@ import Link from "next/link";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { EmojiPicker, fill } from "@/components/activity-fields";
+import {
+  CollapseAllButton,
+  CollapseBody,
+  CollapseToggle,
+  useClosedSections,
+} from "@/components/collapsible";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ActivityGroupItem, ActivityItem } from "@/lib/types";
@@ -68,6 +74,7 @@ export function ActivityGroupsView({
   const [groups, setGroups] = useState(initialGroups);
   const [activities, setActivities] = useState(initialActivities);
   const [picking, setPicking] = useState(false);
+  const { closed, setOpen } = useClosedSections(`time-${kind}-closed`);
   const latest = useRef(groups);
   latest.current = groups;
   const byId = new Map(activities.map((item) => [item.id, item]));
@@ -223,73 +230,93 @@ export function ActivityGroupsView({
   const used = new Set(groups.map((group) => group.activityId));
   const mainChoices = activities.filter((item) => !used.has(item.id));
 
-  return (
-    <div className="space-y-10">
-      {groups.length === 0 && (
-        <p className="text-muted-foreground text-sm">
-          {kind === "investment"
-            ? "Nothing here yet. Pick an activity, then attach what you can do during it."
-            : "No categories yet. Add one, then assign activities to it."}
-        </p>
-      )}
+  const anyOpen = groups.some((group) => !closed.has(group.id));
 
-      {groups.map((group, index) => (
-        <GroupSection
-          key={group.id}
-          group={group}
-          label={labelOf(group)}
-          main={group.activityId ? byId.get(group.activityId) : undefined}
-          activities={activities}
-          first={index === 0}
-          last={index === groups.length - 1}
-          onRename={
-            kind === "hobby" ? (draft) => renameGroup(group, draft) : undefined
-          }
-          onRemove={() => removeGroup(group)}
-          onMove={(offset) => moveGroup(index, offset)}
-          onAddMember={(activityId) => addMember(group, activityId)}
-          onAddNew={(name) => addNewMember(group, name)}
-          onRemoveMember={(member) => removeMember(group, member)}
-          onMoveMember={(memberIndex, offset) =>
-            moveMember(group, memberIndex, offset)
+  return (
+    <div className="space-y-4">
+      {groups.length > 1 && (
+        <CollapseAllButton
+          anyOpen={anyOpen}
+          onClick={(open) =>
+            setOpen(
+              groups.map((group) => group.id),
+              open,
+            )
           }
         />
-      ))}
-
-      {kind === "hobby" ? (
-        <HobbyForm submitLabel="Add category" onSubmit={addGroup} />
-      ) : activities.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          <Link
-            href="/time/activities"
-            className="text-foreground underline underline-offset-4"
-          >
-            Add your activities
-          </Link>{" "}
-          first, then come back to attach them to each other.
-        </p>
-      ) : (
-        <div className="space-y-2">
-          <Button
-            type="button"
-            variant="outline"
-            aria-expanded={picking}
-            disabled={mainChoices.length === 0}
-            onClick={() => setPicking((value) => !value)}
-          >
-            <Plus data-icon="inline-start" />
-            Add main activity
-          </Button>
-          {picking && (
-            <ActivityChips
-              activities={mainChoices}
-              onPick={async (id) => {
-                if (await addGroup({ activityId: id })) setPicking(false);
-              }}
-            />
-          )}
-        </div>
       )}
+
+      <div className="space-y-10">
+        {groups.length === 0 && (
+          <p className="text-muted-foreground text-sm">
+            {kind === "investment"
+              ? "Nothing here yet. Pick an activity, then attach what you can do during it."
+              : "No categories yet. Add one, then assign activities to it."}
+          </p>
+        )}
+
+        {groups.map((group, index) => (
+          <GroupSection
+            key={group.id}
+            group={group}
+            label={labelOf(group)}
+            main={group.activityId ? byId.get(group.activityId) : undefined}
+            activities={activities}
+            first={index === 0}
+            last={index === groups.length - 1}
+            open={!closed.has(group.id)}
+            onToggle={() => setOpen([group.id], closed.has(group.id))}
+            onRename={
+              kind === "hobby"
+                ? (draft) => renameGroup(group, draft)
+                : undefined
+            }
+            onRemove={() => removeGroup(group)}
+            onMove={(offset) => moveGroup(index, offset)}
+            onAddMember={(activityId) => addMember(group, activityId)}
+            onAddNew={(name) => addNewMember(group, name)}
+            onRemoveMember={(member) => removeMember(group, member)}
+            onMoveMember={(memberIndex, offset) =>
+              moveMember(group, memberIndex, offset)
+            }
+          />
+        ))}
+
+        {kind === "hobby" ? (
+          <HobbyForm submitLabel="Add category" onSubmit={addGroup} />
+        ) : activities.length === 0 ? (
+          <p className="text-muted-foreground text-sm">
+            <Link
+              href="/time/activities"
+              className="text-foreground underline underline-offset-4"
+            >
+              Add your activities
+            </Link>{" "}
+            first, then come back to attach them to each other.
+          </p>
+        ) : (
+          <div className="space-y-2">
+            <Button
+              type="button"
+              variant="outline"
+              aria-expanded={picking}
+              disabled={mainChoices.length === 0}
+              onClick={() => setPicking((value) => !value)}
+            >
+              <Plus data-icon="inline-start" />
+              Add main activity
+            </Button>
+            {picking && (
+              <ActivityChips
+                activities={mainChoices}
+                onPick={async (id) => {
+                  if (await addGroup({ activityId: id })) setPicking(false);
+                }}
+              />
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -301,6 +328,8 @@ function GroupSection({
   activities,
   first,
   last,
+  open,
+  onToggle,
   onRename,
   onRemove,
   onMove,
@@ -315,6 +344,8 @@ function GroupSection({
   activities: ActivityItem[];
   first: boolean;
   last: boolean;
+  open: boolean;
+  onToggle: () => void;
   onRename?: (draft: HobbyDraft) => Promise<boolean>;
   onRemove: () => void;
   onMove: (offset: number) => void;
@@ -348,15 +379,22 @@ function GroupSection({
         />
       ) : (
         <div className="group/head border-border flex items-center gap-2 border-b pb-2">
-          {main && (
-            <span
-              className="size-2.5 shrink-0 rounded-full"
-              style={fill(main.color)}
-              aria-hidden
-            />
-          )}
-          <h2 className="font-heading min-w-0 flex-1 truncate text-xl">
-            {label}
+          <h2 className="font-heading min-w-0 flex-1 text-xl">
+            <CollapseToggle
+              open={open}
+              controls={`group-${group.id}`}
+              count={group.members.length}
+              onToggle={onToggle}
+            >
+              {main && (
+                <span
+                  className="size-2.5 shrink-0 rounded-full"
+                  style={fill(main.color)}
+                  aria-hidden
+                />
+              )}
+              <span className="truncate">{label}</span>
+            </CollapseToggle>
           </h2>
           <RowActions
             name={label}
@@ -370,63 +408,65 @@ function GroupSection({
         </div>
       )}
 
-      {group.members.length > 0 ? (
-        <ul className="flex flex-col">
-          {group.members.map((member, index) => {
-            const item = byId.get(member.activityId);
-            const name = item ? nameOf(item) : "Activity";
-            return (
-              <li
-                key={member.id}
-                className="group/row hover:bg-muted/50 focus-within:bg-muted/50 -mx-2 flex items-center gap-3 rounded-md px-2 py-2 transition-colors duration-150"
-              >
-                <span
-                  className="size-2.5 shrink-0 rounded-full"
-                  style={fill(item?.color ?? null)}
-                  aria-hidden
-                />
-                <span className="min-w-0 flex-1 truncate text-[15px]">
-                  {name}
-                </span>
-                <RowActions
-                  name={name}
-                  first={index === 0}
-                  last={index === group.members.length - 1}
-                  group="row"
-                  removeIcon="x"
-                  onMove={(offset) => onMoveMember(index, offset)}
-                  onRemove={() => onRemoveMember(member)}
-                />
-              </li>
-            );
-          })}
-        </ul>
-      ) : (
-        <p className="text-muted-foreground py-1 text-sm">
-          {group.kind === "investment"
-            ? "Nothing attached yet."
-            : "No activities in this category yet."}
-        </p>
-      )}
+      <CollapseBody id={`group-${group.id}`} open={open} className="space-y-2">
+        {group.members.length > 0 ? (
+          <ul className="flex flex-col">
+            {group.members.map((member, index) => {
+              const item = byId.get(member.activityId);
+              const name = item ? nameOf(item) : "Activity";
+              return (
+                <li
+                  key={member.id}
+                  className="group/row hover:bg-muted/50 focus-within:bg-muted/50 -mx-2 flex items-center gap-3 rounded-md px-2 py-2 transition-colors duration-150"
+                >
+                  <span
+                    className="size-2.5 shrink-0 rounded-full"
+                    style={fill(item?.color ?? null)}
+                    aria-hidden
+                  />
+                  <span className="min-w-0 flex-1 truncate text-[15px]">
+                    {name}
+                  </span>
+                  <RowActions
+                    name={name}
+                    first={index === 0}
+                    last={index === group.members.length - 1}
+                    group="row"
+                    removeIcon="x"
+                    onMove={(offset) => onMoveMember(index, offset)}
+                    onRemove={() => onRemoveMember(member)}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="text-muted-foreground py-1 text-sm">
+            {group.kind === "investment"
+              ? "Nothing attached yet."
+              : "No activities in this category yet."}
+          </p>
+        )}
 
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="text-muted-foreground -ml-2"
-        aria-expanded={adding}
-        onClick={() => setAdding((value) => !value)}
-      >
-        <Plus data-icon="inline-start" />
-        Add activity
-      </Button>
-      {adding && (
-        <ActivityChips
-          activities={choices}
-          onPick={onAddMember}
-          onCreate={onAddNew}
-        />
-      )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-muted-foreground -ml-2"
+          aria-expanded={adding}
+          onClick={() => setAdding((value) => !value)}
+        >
+          <Plus data-icon="inline-start" />
+          Add activity
+        </Button>
+        {adding && (
+          <ActivityChips
+            activities={choices}
+            onPick={onAddMember}
+            onCreate={onAddNew}
+          />
+        )}
+      </CollapseBody>
     </section>
   );
 }
