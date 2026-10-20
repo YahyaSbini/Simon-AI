@@ -12,6 +12,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { playCompleteSound } from "@/lib/sound";
+import type { TaskType } from "@/db/schema";
 import type { StepItem, TaskItem } from "@/lib/types";
 
 type TaskMap = Record<string, TaskItem>;
@@ -25,6 +26,8 @@ type TaskStore = {
   hydrate: (items: TaskItem[]) => void;
   createTask: (body: {
     title: string;
+    estimatedMinutes: number;
+    type: TaskType;
     listId?: string | null;
     myDayDate?: string | null;
     dueAt?: string | null;
@@ -129,10 +132,12 @@ export function TaskStoreProvider({ children }: { children: React.ReactNode }) {
         listId: task.listId ?? null,
         priority: task.priority,
         important: task.important ?? false,
-        estimatedMinutes: task.estimatedMinutes ?? null,
+        estimatedMinutes: task.estimatedMinutes,
+        type: task.type,
         dueAt: task.dueAt ?? null,
         myDayDate: task.myDayDate ?? null,
         completed: false,
+        completedAt: null,
         steps: [],
       };
       upsert(item);
@@ -143,7 +148,13 @@ export function TaskStoreProvider({ children }: { children: React.ReactNode }) {
 
   const patchTask = useCallback<TaskStore["patchTask"]>(
     (item, changes, body) => {
-      upsert({ ...item, ...changes });
+      const completedAt =
+        changes.completed === undefined
+          ? {}
+          : {
+              completedAt: changes.completed ? new Date().toISOString() : null,
+            };
+      upsert({ ...item, ...changes, ...completedAt });
       if (changes.completed && !item.completed) playCompleteSound();
 
       void fetch(`/api/tasks/${item.id}`, {

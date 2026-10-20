@@ -1,7 +1,9 @@
 "use client";
 
 import { Star } from "lucide-react";
-import type { TaskItem } from "@/lib/types";
+import type { TaskType } from "@/db/schema";
+import { Input } from "@/components/ui/input";
+import { taskTypes, type TaskItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function StarButton({
@@ -98,5 +100,66 @@ export function RowTrail({
       </span>
       <StarButton active={important} onToggle={onStar} />
     </span>
+  );
+}
+
+/** Parses a minutes field; null unless it is a whole number from 1 to 1440. */
+export function parseMinutes(value: string): number | null {
+  const minutes = Number(value);
+  return Number.isInteger(minutes) && minutes >= 1 && minutes <= 1440
+    ? minutes
+    : null;
+}
+
+export const fieldSelectClass =
+  "border-input bg-background h-8 rounded-lg border px-2 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50";
+
+/** Required time and type pickers shown next to every "add a task" box. */
+export function TaskSetupFields({
+  minutes,
+  type,
+  onMinutesChange,
+  onTypeChange,
+  className,
+}: {
+  minutes: string;
+  type: TaskType;
+  onMinutesChange: (value: string) => void;
+  onTypeChange: (value: TaskType) => void;
+  className?: string;
+}) {
+  return (
+    <>
+      <label className="relative shrink-0">
+        <span className="sr-only">Time in minutes</span>
+        <Input
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={1440}
+          required
+          value={minutes}
+          onChange={(event) => onMinutesChange(event.target.value)}
+          aria-invalid={parseMinutes(minutes) === null}
+          className={cn("w-20 pr-9 tabular-nums", className)}
+        />
+        <span className="text-muted-foreground pointer-events-none absolute top-1/2 right-2.5 -translate-y-1/2 text-xs">
+          min
+        </span>
+      </label>
+      <select
+        aria-label="Task type"
+        required
+        value={type}
+        onChange={(event) => onTypeChange(event.target.value as TaskType)}
+        className={cn(fieldSelectClass, "shrink-0", className)}
+      >
+        {taskTypes.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </>
   );
 }

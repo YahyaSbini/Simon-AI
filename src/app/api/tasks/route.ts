@@ -4,14 +4,15 @@ import { z } from "zod";
 import { db } from "@/db";
 import { list, task } from "@/db/schema";
 import { requireUserId } from "@/lib/session";
-import { dateKey, timestamp } from "@/lib/validation";
+import { dateKey, minutes, taskType, timestamp } from "@/lib/validation";
 
 const createTaskSchema = z.object({
   title: z.string().trim().min(1).max(200),
   notes: z.string().trim().max(2000).optional(),
   listId: z.string().uuid().nullish(),
   priority: z.enum(["none", "low", "medium", "high"]).optional(),
-  estimatedMinutes: z.number().int().min(1).max(1440).nullish(),
+  estimatedMinutes: minutes,
+  type: taskType,
   dueAt: timestamp.nullish(),
   myDayDate: dateKey.nullish(),
 });
@@ -49,7 +50,7 @@ export async function POST(request: Request) {
 
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Give the task a title of 1–200 characters." },
+      { error: "Give the task a title, a time in minutes and a type." },
       { status: 400 },
     );
   }

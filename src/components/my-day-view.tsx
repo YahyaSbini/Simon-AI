@@ -6,7 +6,11 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { RoutineEditor } from "@/components/routine-editor";
 import { SortableList, SortableRow } from "@/components/sortable-list";
-import { RowTrail } from "@/components/task-bits";
+import {
+  parseMinutes,
+  RowTrail,
+  TaskSetupFields,
+} from "@/components/task-bits";
 import { TaskDetail } from "@/components/task-detail";
 import { useTasks, useTaskStore } from "@/components/task-store";
 import { TaskRows } from "@/components/task-view";
@@ -16,13 +20,16 @@ import { Input } from "@/components/ui/input";
 import { formatDue, formatMinutes, fromDateKey } from "@/lib/dates";
 import { playCompleteSound } from "@/lib/sound";
 import { taskMatches } from "@/lib/task-views";
-import type {
-  CalendarAgenda,
-  CalendarEvent,
-  ListItem,
-  RoutineOccurrence,
-  StepItem,
-  TaskItem,
+import type { TaskType } from "@/db/schema";
+import {
+  type CalendarAgenda,
+  type CalendarEvent,
+  defaultMinutes,
+  type ListItem,
+  type RoutineOccurrence,
+  type StepItem,
+  type TaskItem,
+  taskTypeLabels,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -47,6 +54,8 @@ export function MyDayView({
   const tasks = useTasks(initialTasks, matches);
   const [routines, setRoutines] = useState(initialRoutines);
   const [title, setTitle] = useState("");
+  const [minutes, setMinutes] = useState(String(defaultMinutes));
+  const [type, setType] = useState<TaskType>("independent");
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [openRoutineKey, setOpenRoutineKey] = useState<string | null>(null);
   const [leaving, setLeaving] = useState<Set<string>>(() => new Set());
@@ -74,16 +83,23 @@ export function MyDayView({
   function addTask(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmed = title.trim();
+    const estimatedMinutes = parseMinutes(minutes);
 
-    if (!trimmed) return;
+    if (!trimmed || estimatedMinutes === null) return;
 
     startTransition(async () => {
       const created = await store.createTask({
         title: trimmed,
+        estimatedMinutes,
+        type,
         myDayDate: date,
         dueAt: new Date(`${date}T12:00:00`).toISOString(),
       });
-      if (created) setTitle("");
+      if (created) {
+        setTitle("");
+        setMinutes(String(defaultMinutes));
+        setType("independent");
+      }
     });
   }
 
@@ -326,24 +342,20 @@ export function MyDayView({
                     >
                       {item.title}
                     </span>
-                    {(item.notes ||
-                      item.steps.length > 0 ||
-                      item.timeOfDay ||
-                      item.estimatedMinutes) && (
-                      <span className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-3 text-xs">
-                        {routineTime(item) && (
-                          <span className="sm:hidden">{routineTime(item)}</span>
-                        )}
-                        {item.steps.length > 0 && (
-                          <span>
-                            {`${item.steps.filter((step) => step.completed).length} of ${item.steps.length} steps`}
-                          </span>
-                        )}
-                        {item.notes && (
-                          <span className="truncate">{item.notes}</span>
-                        )}
-                      </span>
-                    )}
+                    <span className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-3 text-xs">
+                      <span>{taskTypeLabels[item.type]}</span>
+                      {routineTime(item) && (
+                        <span className="sm:hidden">{routineTime(item)}</span>
+                      )}
+                      {item.steps.length > 0 && (
+                        <span>
+                          {`${item.steps.filter((step) => step.completed).length} of ${item.steps.length} steps`}
+                        </span>
+                      )}
+                      {item.notes && (
+                        <span className="truncate">{item.notes}</span>
+                      )}
+                    </span>
                   </button>
                   <RowTrail
                     time={
@@ -370,8 +382,8 @@ export function MyDayView({
         onSubmit={addTask}
         className="bg-background/95 border-border fixed inset-x-0 bottom-0 z-20 border-t backdrop-blur md:left-64"
       >
-        <div className="mx-auto flex w-full max-w-5xl items-center gap-2 px-4 py-3 md:px-8">
-          <div className="relative flex-1">
+        <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-2 px-4 py-3 md:px-8">
+          <div className="relative basis-full sm:flex-1 sm:basis-0">
             <Plus
               className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2"
               aria-hidden
@@ -385,10 +397,21 @@ export function MyDayView({
               className="h-10 pl-9"
             />
           </div>
+          <TaskSetupFields
+            minutes={minutes}
+            type={type}
+            onMinutesChange={setMinutes}
+            onTypeChange={setType}
+            className="h-10"
+          />
           <Button
             type="submit"
-            className="h-10"
-            disabled={pending || title.trim().length === 0}
+            className="ml-auto h-10 sm:ml-0"
+            disabled={
+              pending ||
+              title.trim().length === 0 ||
+              parseMinutes(minutes) === null
+            }
           >
             Add
           </Button>
@@ -594,7 +617,7 @@ function routineTime(item: RoutineOccurrence): string | null {
 
 function sumEstimate(
   total: number,
-  item: { estimatedMinutes: number | null },
+  item: { estimatedMinutes: number },
 ): number {
-  return total + (item.estimatedMinutes ?? 0);
+  return total + item.estimatedMinutes;
 }

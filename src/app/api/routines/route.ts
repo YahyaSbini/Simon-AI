@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Check the routine's title and repeat rule." },
+      { error: "Check the routine's title, time, type and repeat rule." },
       { status: 400 },
     );
   }

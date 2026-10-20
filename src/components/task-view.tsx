@@ -3,7 +3,11 @@
 import { CalendarClock, Clock, Sun, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { SortableList, SortableRow } from "@/components/sortable-list";
-import { RowTrail } from "@/components/task-bits";
+import {
+  parseMinutes,
+  RowTrail,
+  TaskSetupFields,
+} from "@/components/task-bits";
 import { useOpenParam } from "@/components/use-open-param";
 import { TaskDetail } from "@/components/task-detail";
 import { useTasks, useTaskStore } from "@/components/task-store";
@@ -12,12 +16,20 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { formatDue, formatMinutes, today } from "@/lib/dates";
 import {
+  type CompletedSort,
   dueDateFirst,
   isOverdue,
+  sortCompleted,
   taskMatches,
   type TaskViewKey,
 } from "@/lib/task-views";
-import type { ListItem, TaskItem } from "@/lib/types";
+import type { TaskType } from "@/db/schema";
+import {
+  defaultMinutes,
+  type ListItem,
+  type TaskItem,
+  taskTypeLabels,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function TaskView({
@@ -27,6 +39,7 @@ export function TaskView({
   view,
   emptyMessage,
   date,
+  completedSort = "date",
 }: {
   initialTasks: TaskItem[];
   lists: ListItem[];
@@ -34,6 +47,7 @@ export function TaskView({
   view: TaskViewKey;
   emptyMessage: string;
   date?: string;
+  completedSort?: CompletedSort;
 }) {
   const store = useTaskStore();
   const matches = useCallback(
@@ -42,10 +56,21 @@ export function TaskView({
   );
   const unsorted = useTasks(initialTasks, matches);
   const tasks = useMemo(
-    () => (view === "all" ? dueDateFirst(unsorted, date) : unsorted),
-    [view, unsorted, date],
+    () =>
+      view === "all"
+        ? dueDateFirst(unsorted, date)
+        : view === "completed"
+          ? sortCompleted(
+              unsorted,
+              completedSort,
+              (task) => task.completedAt ?? "",
+            )
+          : unsorted,
+    [view, unsorted, date, completedSort],
   );
   const [title, setTitle] = useState("");
+  const [minutes, setMinutes] = useState(String(defaultMinutes));
+  const [type, setType] = useState<TaskType>("independent");
   const [openTaskId, setOpenTaskId] = useOpenParam();
   const [pending, startTransition] = useTransition();
 
@@ -55,12 +80,22 @@ export function TaskView({
   function addTask(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const trimmed = title.trim();
+    const estimatedMinutes = parseMinutes(minutes);
 
-    if (!trimmed) return;
+    if (!trimmed || estimatedMinutes === null) return;
 
     startTransition(async () => {
-      const created = await store.createTask({ title: trimmed, listId });
-      if (created) setTitle("");
+      const created = await store.createTask({
+        title: trimmed,
+        estimatedMinutes,
+        type,
+        listId,
+      });
+      if (created) {
+        setTitle("");
+        setMinutes(String(defaultMinutes));
+        setType("independent");
+      }
     });
   }
 
@@ -72,15 +107,30 @@ export function TaskView({
   return (
     <div className="space-y-6">
       {!completedView && (
-        <form onSubmit={addTask} className="flex gap-2">
+        <form onSubmit={addTask} className="flex flex-wrap gap-2">
           <Input
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             placeholder="Add a task"
             aria-label="Task title"
             maxLength={200}
+            className="basis-full sm:flex-1 sm:basis-0"
           />
-          <Button type="submit" disabled={pending || title.trim().length === 0}>
+          <TaskSetupFields
+            minutes={minutes}
+            type={type}
+            onMinutesChange={setMinutes}
+            onTypeChange={setType}
+          />
+          <Button
+            type="submit"
+            className="ml-auto sm:ml-0"
+            disabled={
+              pending ||
+              title.trim().length === 0 ||
+              parseMinutes(minutes) === null
+            }
+          >
             Add
           </Button>
         </form>
@@ -212,7 +262,9 @@ export function TaskRows({
 export function TaskMeta({ task }: { task: TaskItem }) {
   const steps = task.steps.length;
   const doneSteps = task.steps.filter((step) => step.completed).length;
-  const parts: React.ReactNode[] = [];
+  const parts: React.ReactNode[] = [
+    <span key="type">{taskTypeLabels[task.type]}</span>,
+  ];
 
   if (task.myDayDate === today()) {
     parts.push(

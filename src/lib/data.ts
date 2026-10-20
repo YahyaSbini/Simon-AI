@@ -117,9 +117,11 @@ export function serializeTask(row: Task, steps: TaskStep[] = []): TaskItem {
     priority: row.priority,
     important: row.important,
     estimatedMinutes: row.estimatedMinutes,
+    type: row.type,
     dueAt: row.dueAt?.toISOString() ?? null,
     myDayDate: row.myDayDate,
     completed: row.completedAt !== null,
+    completedAt: row.completedAt?.toISOString() ?? null,
     steps: steps
       .filter((step) => step.taskId === row.id)
       .map((step) => ({
@@ -143,10 +145,12 @@ export function serializeRoutine(
     priority: row.priority,
     important: row.important,
     estimatedMinutes: row.estimatedMinutes,
+    type: row.type,
     frequency: row.frequency,
     interval: row.interval,
     byWeekday: row.byWeekday,
     byMonthDay: row.byMonthDay,
+    byLastWeekday: row.byLastWeekday,
     timeOfDay: row.timeOfDay,
     startDate: row.startDate,
     endDate: row.endDate,
