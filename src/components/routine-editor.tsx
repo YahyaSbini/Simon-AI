@@ -14,7 +14,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { isoWeekday, today } from "@/lib/dates";
 import { describeRecurrence, fullWeekdayNames } from "@/lib/routines";
 import {
-  defaultMinutes,
   priorities,
   type RoutineItem,
   type StepItem,
@@ -61,7 +60,7 @@ function emptyDraft(): Draft {
     monthlyOn: "day",
     byLastWeekday: isoWeekday(today()),
     timeOfDay: "",
-    estimatedMinutes: String(defaultMinutes),
+    estimatedMinutes: "",
     type: "independent",
     priority: "none",
     startDate: today(),
@@ -456,7 +455,11 @@ export function RoutineEditor({
                 min={1}
                 max={1440}
                 required
-                aria-invalid={parseMinutes(draft.estimatedMinutes) === null}
+                placeholder="Required"
+                aria-invalid={
+                  draft.estimatedMinutes !== "" &&
+                  parseMinutes(draft.estimatedMinutes) === null
+                }
                 value={draft.estimatedMinutes}
                 onChange={(event) =>
                   setDraft({ ...draft, estimatedMinutes: event.target.value })
@@ -525,7 +528,10 @@ export function RoutineEditor({
           )}
 
           <div className="flex gap-2">
-            <Button onClick={save} disabled={saving}>
+            <Button
+              onClick={save}
+              disabled={saving || parseMinutes(draft.estimatedMinutes) === null}
+            >
               {routine ? "Save routine" : "Create routine"}
             </Button>
             <Button variant="ghost" onClick={onClose}>

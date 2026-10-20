@@ -147,7 +147,7 @@ export const routine = pgTable(
     notes: text("notes"),
     priority: priority("priority").notNull().default("none"),
     important: boolean("important").notNull().default(false),
-    estimatedMinutes: integer("estimated_minutes").notNull().default(15),
+    estimatedMinutes: integer("estimated_minutes").notNull(),
     type: taskType("type").notNull().default("independent"),
     frequency: frequency("frequency").notNull().default("daily"),
     /** Repeat every N days/weeks/months, depending on `frequency`. */
