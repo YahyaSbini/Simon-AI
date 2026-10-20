@@ -1,6 +1,5 @@
 import { redirect } from "next/navigation";
-import { CompletedRoutines } from "@/components/completed-routines";
-import { TaskView } from "@/components/task-view";
+import { CompletedView } from "@/components/completed-view";
 import { getCompletedRoutines, getLists, getTasks } from "@/lib/data";
 import { getSession } from "@/lib/session";
 
@@ -26,18 +25,7 @@ export default async function CompletedPage() {
         </p>
       </header>
 
-      <TaskView
-        initialTasks={tasks}
-        lists={lists}
-        view="completed"
-        emptyMessage={
-          routines.length
-            ? "No ticked tasks yet."
-            : "Nothing ticked yet. Completed tasks and routines land here."
-        }
-      />
-
-      <CompletedRoutines initialItems={routines} />
+      <CompletedView tasks={tasks} lists={lists} routines={routines} />
     </div>
   );
 }

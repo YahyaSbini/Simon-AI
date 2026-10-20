@@ -1,4 +1,4 @@
-import type { EntryKind, Frequency, Priority } from "@/db/schema";
+import type { EntryKind, Frequency, Priority, TaskType } from "@/db/schema";
 
 export type ListItem = {
   id: string;
@@ -74,10 +74,12 @@ export type TaskItem = {
   listId: string | null;
   priority: Priority;
   important: boolean;
-  estimatedMinutes: number | null;
+  estimatedMinutes: number;
+  type: TaskType;
   dueAt: string | null;
   myDayDate: string | null;
   completed: boolean;
+  completedAt: string | null;
   steps: StepItem[];
 };
 
@@ -87,11 +89,13 @@ export type RoutineItem = {
   notes: string | null;
   priority: Priority;
   important: boolean;
-  estimatedMinutes: number | null;
+  estimatedMinutes: number;
+  type: TaskType;
   frequency: Frequency;
   interval: number;
   byWeekday: number[] | null;
   byMonthDay: number | null;
+  byLastWeekday: number | null;
   timeOfDay: string | null;
   startDate: string;
   endDate: string | null;
@@ -160,6 +164,20 @@ export const priorities: { value: Priority; label: string }[] = [
   { value: "medium", label: "Medium" },
   { value: "high", label: "High" },
 ];
+
+export const defaultMinutes = 15;
+
+export const taskTypes: { value: TaskType; label: string }[] = [
+  { value: "independent", label: "Independent" },
+  { value: "dependent", label: "Dependent" },
+  { value: "hybrid", label: "Hybrid" },
+];
+
+export const taskTypeLabels: Record<TaskType, string> = {
+  independent: "Independent",
+  dependent: "Dependent",
+  hybrid: "Hybrid",
+};
 
 export const priorityLabels: Record<Priority, string> = {
   none: "None",

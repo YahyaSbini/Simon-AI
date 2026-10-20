@@ -1,0 +1,20 @@
+// Fills values that new NOT NULL columns require, so `drizzle-kit push` can apply them.
+import { existsSync } from "node:fs";
+import postgres from "postgres";
+
+if (!process.env.DATABASE_URL && existsSync(".env"))
+  process.loadEnvFile(".env");
+
+const sql = postgres(process.env.DATABASE_URL, { max: 1, prepare: false });
+
+try {
+  for (const table of ["task", "routine"]) {
+    await sql`update ${sql(table)} set estimated_minutes = 15 where estimated_minutes is null`.catch(
+      (error) => {
+        if (error.code !== "42P01") throw error;
+      },
+    );
+  }
+} finally {
+  await sql.end();
+}

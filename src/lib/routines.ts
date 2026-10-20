@@ -34,9 +34,17 @@ export function occursOn(routine: Routine, date: string): boolean {
     case "monthly": {
       const start = fromDateKey(routine.startDate);
       const current = fromDateKey(date);
-      const monthDay = routine.byMonthDay ?? start.getDate();
 
-      if (current.getDate() !== monthDay) return false;
+      if (routine.byLastWeekday) {
+        if (isoWeekday(date) !== routine.byLastWeekday) return false;
+        const weekLater = new Date(current);
+        weekLater.setDate(current.getDate() + 7);
+        if (weekLater.getMonth() === current.getMonth()) return false;
+      } else if (
+        current.getDate() !== (routine.byMonthDay ?? start.getDate())
+      ) {
+        return false;
+      }
 
       const months =
         (current.getFullYear() - start.getFullYear()) * 12 +
@@ -55,6 +63,15 @@ function startOfWeek(date: string): string {
 }
 
 const weekdayNames = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+export const fullWeekdayNames = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
+];
 
 function weekdayList(days: number[]): string {
   if (days.length === 7) return "every day";
@@ -101,10 +118,12 @@ function describeRule(routine: Routine): string {
         : `Weekly on ${days}`;
     }
     case "monthly": {
-      const day = routine.byMonthDay ?? fromDateKey(routine.startDate).getDate();
+      const day = routine.byLastWeekday
+        ? `the last ${fullWeekdayNames[routine.byLastWeekday - 1]}`
+        : `day ${routine.byMonthDay ?? fromDateKey(routine.startDate).getDate()}`;
       return routine.interval > 1
-        ? `Every ${every}months on day ${day}`
-        : `Monthly on day ${day}`;
+        ? `Every ${every}months on ${day}`
+        : `Monthly on ${day}`;
     }
   }
 }

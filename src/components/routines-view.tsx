@@ -10,7 +10,12 @@ import { useOpenParam } from "@/components/use-open-param";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { formatMinutes } from "@/lib/dates";
-import { priorityLabels, type RoutineItem, type StepItem } from "@/lib/types";
+import {
+  priorityLabels,
+  type RoutineItem,
+  type StepItem,
+  taskTypeLabels,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export function RoutinesView({
@@ -137,11 +142,10 @@ export function RoutinesView({
                 </span>
                 <span className="text-muted-foreground block text-xs">
                   {[
+                    taskTypeLabels[routine.type],
                     routine.recurrence,
                     routine.timeOfDay,
-                    routine.estimatedMinutes
-                      ? formatMinutes(routine.estimatedMinutes)
-                      : null,
+                    formatMinutes(routine.estimatedMinutes),
                     routine.priority === "none"
                       ? null
                       : `${priorityLabels[routine.priority]} priority`,

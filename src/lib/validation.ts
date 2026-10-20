@@ -15,16 +15,21 @@ export const timestamp = z.coerce
     (value) => value.getFullYear() >= 1900 && value.getFullYear() <= 2999,
   );
 
+export const minutes = z.number().int().min(1).max(1440);
+export const taskType = z.enum(["dependent", "independent", "hybrid"]);
+
 export const routineInput = z.object({
   title: z.string().trim().min(1).max(200),
   notes: z.string().trim().max(2000).nullish(),
   priority: z.enum(["none", "low", "medium", "high"]).optional(),
   important: z.boolean().optional(),
-  estimatedMinutes: z.number().int().min(1).max(1440).nullish(),
+  estimatedMinutes: minutes,
+  type: taskType,
   frequency: z.enum(["daily", "weekly", "monthly"]),
   interval: z.number().int().min(1).max(365).default(1),
   byWeekday: z.array(z.number().int().min(1).max(7)).nullish(),
   byMonthDay: z.number().int().min(1).max(31).nullish(),
+  byLastWeekday: z.number().int().min(1).max(7).nullish(),
   timeOfDay: z
     .string()
     .regex(/^\d{2}:\d{2}$/)

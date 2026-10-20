@@ -1,19 +1,27 @@
 "use client";
 
 import { Repeat } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import type { CompletedRoutine } from "@/lib/data";
 import { formatDay } from "@/lib/dates";
+import { type CompletedSort, sortCompleted } from "@/lib/task-views";
 
 /** Ticked routine occurrences; unticking removes the completion for that day. */
 export function CompletedRoutines({
   initialItems,
+  sort,
 }: {
   initialItems: CompletedRoutine[];
+  sort: CompletedSort;
 }) {
   const [items, setItems] = useState(initialItems);
+  const sorted = useMemo(
+    () =>
+      sortCompleted(items, sort, (item) => `${item.date} ${item.completedAt}`),
+    [items, sort],
+  );
 
   useEffect(() => {
     setItems(initialItems);
@@ -54,7 +62,7 @@ export function CompletedRoutines({
       </div>
 
       <ul>
-        {items.map((item) => (
+        {sorted.map((item) => (
           <li
             key={`${item.id}-${item.date}`}
             className="hover:bg-muted/50 -mx-2 flex items-center gap-3 rounded-md px-2 py-2.5 transition-colors duration-150"

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { StepEditor } from "@/components/step-editor";
+import { parseMinutes } from "@/components/task-bits";
 import { selectClass } from "@/components/task-detail";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -10,9 +11,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
-import { today } from "@/lib/dates";
-import { describeRecurrence } from "@/lib/routines";
-import { priorities, type RoutineItem, type StepItem } from "@/lib/types";
+import { isoWeekday, today } from "@/lib/dates";
+import { describeRecurrence, fullWeekdayNames } from "@/lib/routines";
+import {
+  defaultMinutes,
+  priorities,
+  type RoutineItem,
+  type StepItem,
+  taskTypes,
+} from "@/lib/types";
 
 const weekdays = [
   { value: 1, label: "Mon" },
@@ -31,8 +38,11 @@ type Draft = {
   interval: number;
   byWeekday: number[];
   byMonthDay: number;
+  monthlyOn: "day" | "last";
+  byLastWeekday: number;
   timeOfDay: string;
   estimatedMinutes: string;
+  type: RoutineItem["type"];
   priority: RoutineItem["priority"];
   startDate: string;
   endDate: string;
@@ -48,8 +58,11 @@ function emptyDraft(): Draft {
     interval: 1,
     byWeekday: [],
     byMonthDay: now.getDate(),
+    monthlyOn: "day",
+    byLastWeekday: isoWeekday(today()),
     timeOfDay: "",
-    estimatedMinutes: "",
+    estimatedMinutes: String(defaultMinutes),
+    type: "independent",
     priority: "none",
     startDate: today(),
     endDate: "",
@@ -65,8 +78,11 @@ function toDraft(routine: RoutineItem): Draft {
     interval: routine.interval,
     byWeekday: routine.byWeekday ?? [],
     byMonthDay: routine.byMonthDay ?? 1,
+    monthlyOn: routine.byLastWeekday ? "last" : "day",
+    byLastWeekday: routine.byLastWeekday ?? isoWeekday(routine.startDate),
     timeOfDay: routine.timeOfDay ?? "",
-    estimatedMinutes: routine.estimatedMinutes?.toString() ?? "",
+    estimatedMinutes: String(routine.estimatedMinutes),
+    type: routine.type,
     priority: routine.priority,
     startDate: routine.startDate,
     endDate: routine.endDate ?? "",
@@ -120,6 +136,11 @@ export function RoutineEditor({
       toast.error("Pick at least one day.");
       return;
     }
+    const estimatedMinutes = parseMinutes(draft.estimatedMinutes);
+    if (estimatedMinutes === null) {
+      toast.error("Set a time between 1 and 1440 minutes.");
+      return;
+    }
     if (draft.endDate && draft.endDate < draft.startDate) {
       toast.error("The end date must be after the start date.");
       return;
@@ -134,11 +155,17 @@ export function RoutineEditor({
         draft.frequency !== "monthly" && draft.byWeekday.length
           ? draft.byWeekday
           : null,
-      byMonthDay: draft.frequency === "monthly" ? draft.byMonthDay : null,
+      byMonthDay:
+        draft.frequency === "monthly" && draft.monthlyOn === "day"
+          ? draft.byMonthDay
+          : null,
+      byLastWeekday:
+        draft.frequency === "monthly" && draft.monthlyOn === "last"
+          ? draft.byLastWeekday
+          : null,
       timeOfDay: draft.timeOfDay || null,
-      estimatedMinutes: draft.estimatedMinutes
-        ? Number(draft.estimatedMinutes)
-        : null,
+      estimatedMinutes,
+      type: draft.type,
       priority: draft.priority,
       startDate: isDateKey(draft.startDate) ? draft.startDate : today(),
       endDate: isDateKey(draft.endDate) ? draft.endDate : null,
@@ -291,21 +318,64 @@ export function RoutineEditor({
           )}
 
           {draft.frequency === "monthly" && (
-            <div className="space-y-1.5">
-              <Label htmlFor="routine-monthday">Day of month</Label>
-              <Input
-                id="routine-monthday"
-                type="number"
-                min={1}
-                max={31}
-                value={draft.byMonthDay}
-                onChange={(event) =>
-                  setDraft({
-                    ...draft,
-                    byMonthDay: Number(event.target.value) || 1,
-                  })
-                }
-              />
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="routine-monthly-on">On</Label>
+                <select
+                  id="routine-monthly-on"
+                  className={selectClass}
+                  value={draft.monthlyOn}
+                  onChange={(event) =>
+                    setDraft({
+                      ...draft,
+                      monthlyOn: event.target.value as Draft["monthlyOn"],
+                    })
+                  }
+                >
+                  <option value="day">Day of month</option>
+                  <option value="last">Last weekday</option>
+                </select>
+              </div>
+
+              {draft.monthlyOn === "day" ? (
+                <div className="space-y-1.5">
+                  <Label htmlFor="routine-monthday">Day</Label>
+                  <Input
+                    id="routine-monthday"
+                    type="number"
+                    min={1}
+                    max={31}
+                    value={draft.byMonthDay}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        byMonthDay: Number(event.target.value) || 1,
+                      })
+                    }
+                  />
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  <Label htmlFor="routine-last-weekday">Last</Label>
+                  <select
+                    id="routine-last-weekday"
+                    className={selectClass}
+                    value={draft.byLastWeekday}
+                    onChange={(event) =>
+                      setDraft({
+                        ...draft,
+                        byLastWeekday: Number(event.target.value),
+                      })
+                    }
+                  >
+                    {fullWeekdayNames.map((name, index) => (
+                      <option key={name} value={index + 1}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
           )}
 
@@ -378,12 +448,15 @@ export function RoutineEditor({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="routine-estimate">Estimate (minutes)</Label>
+              <Label htmlFor="routine-estimate">Time (minutes)</Label>
               <Input
                 id="routine-estimate"
                 type="number"
+                inputMode="numeric"
                 min={1}
                 max={1440}
+                required
+                aria-invalid={parseMinutes(draft.estimatedMinutes) === null}
                 value={draft.estimatedMinutes}
                 onChange={(event) =>
                   setDraft({ ...draft, estimatedMinutes: event.target.value })
@@ -392,25 +465,48 @@ export function RoutineEditor({
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label htmlFor="routine-priority">Priority</Label>
-            <select
-              id="routine-priority"
-              className={selectClass}
-              value={draft.priority}
-              onChange={(event) =>
-                setDraft({
-                  ...draft,
-                  priority: event.target.value as RoutineItem["priority"],
-                })
-              }
-            >
-              {priorities.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="routine-type">Type</Label>
+              <select
+                id="routine-type"
+                className={selectClass}
+                value={draft.type}
+                onChange={(event) =>
+                  setDraft({
+                    ...draft,
+                    type: event.target.value as RoutineItem["type"],
+                  })
+                }
+              >
+                {taskTypes.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="routine-priority">Priority</Label>
+              <select
+                id="routine-priority"
+                className={selectClass}
+                value={draft.priority}
+                onChange={(event) =>
+                  setDraft({
+                    ...draft,
+                    priority: event.target.value as RoutineItem["priority"],
+                  })
+                }
+              >
+                {priorities.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {routine ? (

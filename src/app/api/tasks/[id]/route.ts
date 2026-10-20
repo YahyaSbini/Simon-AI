@@ -4,7 +4,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { list, task } from "@/db/schema";
 import { requireUserId } from "@/lib/session";
-import { dateKey, timestamp } from "@/lib/validation";
+import { dateKey, minutes, taskType, timestamp } from "@/lib/validation";
 
 const updateTaskSchema = z.object({
   title: z.string().trim().min(1).max(200).optional(),
@@ -12,7 +12,8 @@ const updateTaskSchema = z.object({
   listId: z.string().uuid().nullish(),
   priority: z.enum(["none", "low", "medium", "high"]).optional(),
   important: z.boolean().optional(),
-  estimatedMinutes: z.number().int().min(1).max(1440).nullish(),
+  estimatedMinutes: minutes.optional(),
+  type: taskType.optional(),
   dueAt: timestamp.nullish(),
   myDayDate: dateKey.nullish(),
   completed: z.boolean().optional(),

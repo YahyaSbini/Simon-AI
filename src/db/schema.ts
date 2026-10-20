@@ -85,6 +85,12 @@ export const list = pgTable(
   (t) => [index("list_user_id_idx").on(t.userId)],
 );
 
+export const taskType = pgEnum("task_type", [
+  "dependent",
+  "independent",
+  "hybrid",
+]);
+
 export const task = pgTable(
   "task",
   {
@@ -97,7 +103,8 @@ export const task = pgTable(
     notes: text("notes"),
     priority: priority("priority").notNull().default("none"),
     important: boolean("important").notNull().default(false),
-    estimatedMinutes: integer("estimated_minutes"),
+    estimatedMinutes: integer("estimated_minutes").notNull().default(15),
+    type: taskType("type").notNull().default("independent"),
     dueAt: timestamp("due_at"),
     myDayDate: date("my_day_date"),
     position: integer("position").notNull().default(0),
@@ -140,7 +147,8 @@ export const routine = pgTable(
     notes: text("notes"),
     priority: priority("priority").notNull().default("none"),
     important: boolean("important").notNull().default(false),
-    estimatedMinutes: integer("estimated_minutes"),
+    estimatedMinutes: integer("estimated_minutes").notNull().default(15),
+    type: taskType("type").notNull().default("independent"),
     frequency: frequency("frequency").notNull().default("daily"),
     /** Repeat every N days/weeks/months, depending on `frequency`. */
     interval: integer("interval").notNull().default(1),
@@ -148,6 +156,8 @@ export const routine = pgTable(
     byWeekday: integer("by_weekday").array(),
     /** Day of month (1–31) for monthly routines. */
     byMonthDay: integer("by_month_day"),
+    /** ISO weekday for "last <weekday> of the month"; overrides `byMonthDay`. */
+    byLastWeekday: integer("by_last_weekday"),
     /** Local time of day as HH:MM. */
     timeOfDay: text("time_of_day"),
     startDate: date("start_date").notNull(),
@@ -393,6 +403,7 @@ export type Routine = typeof routine.$inferSelect;
 export type RoutineStep = typeof routineStep.$inferSelect;
 export type Priority = (typeof priority.enumValues)[number];
 export type Frequency = (typeof frequency.enumValues)[number];
+export type TaskType = (typeof taskType.enumValues)[number];
 export type FinanceCategory = typeof financeCategory.$inferSelect;
 export type BudgetItem = typeof budgetItem.$inferSelect;
 export type FinanceEntry = typeof financeEntry.$inferSelect;

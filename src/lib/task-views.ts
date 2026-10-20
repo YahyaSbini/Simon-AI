@@ -63,3 +63,20 @@ export function dueDateFirst(tasks: TaskItem[], date = today()): TaskItem[] {
     return a.dueAt.localeCompare(b.dueAt);
   });
 }
+
+export type CompletedSort = "date" | "title";
+
+/** Ticked items newest first by `tickedAt`, or alphabetically by title. */
+export function sortCompleted<T extends { title: string }>(
+  items: T[],
+  sort: CompletedSort,
+  tickedAt: (item: T) => string,
+): T[] {
+  return items
+    .slice()
+    .sort((a, b) =>
+      sort === "title"
+        ? a.title.localeCompare(b.title, undefined, { sensitivity: "base" })
+        : tickedAt(b).localeCompare(tickedAt(a)),
+    );
+}

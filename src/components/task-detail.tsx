@@ -2,7 +2,7 @@
 
 import { Sun, Trash2, X } from "lucide-react";
 import { StepEditor } from "@/components/step-editor";
-import { StarButton } from "@/components/task-bits";
+import { parseMinutes, StarButton } from "@/components/task-bits";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,7 +11,13 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { toDateKey, today } from "@/lib/dates";
-import { type ListItem, priorities, type StepItem, type TaskItem } from "@/lib/types";
+import {
+  type ListItem,
+  priorities,
+  type StepItem,
+  type TaskItem,
+  taskTypes,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 // A native date input fires change on every keystroke, so partial years like 0026 arrive here.
@@ -41,11 +47,16 @@ export function TaskDetail({
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
   const [due, setDue] = useState("");
+  const [minutes, setMinutes] = useState("");
 
   useEffect(() => {
     setTitle(task?.title ?? "");
     setNotes(task?.notes ?? "");
   }, [task?.id, task?.title, task?.notes]);
+
+  useEffect(() => {
+    setMinutes(task?.estimatedMinutes ? String(task.estimatedMinutes) : "");
+  }, [task?.id, task?.estimatedMinutes]);
 
   useEffect(() => {
     setDue(task?.dueAt ? toDateKey(new Date(task.dueAt)) : "");
@@ -80,6 +91,19 @@ export function TaskDetail({
     if (dueAt === task.dueAt) return;
 
     onChange(task, { dueAt }, { dueAt });
+  }
+
+  function commitMinutes() {
+    if (!task) return;
+    const estimatedMinutes = parseMinutes(minutes);
+
+    if (estimatedMinutes === null) {
+      setMinutes(String(task.estimatedMinutes));
+      return;
+    }
+    if (estimatedMinutes === task.estimatedMinutes) return;
+
+    onChange(task, { estimatedMinutes }, { estimatedMinutes });
   }
 
   function commitNotes() {
@@ -162,14 +186,32 @@ export function TaskDetail({
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
+              <Label htmlFor="task-type">Type</Label>
+              <select
+                id="task-type"
+                className={selectClass}
+                value={task.type}
+                onChange={(event) => {
+                  const type = event.target.value as TaskItem["type"];
+                  onChange(task, { type }, { type });
+                }}
+              >
+                {taskTypes.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
               <Label htmlFor="task-priority">Priority</Label>
               <select
                 id="task-priority"
                 className={selectClass}
                 value={task.priority}
                 onChange={(event) => {
-                  const priority = event.target
-                    .value as TaskItem["priority"];
+                  const priority = event.target.value as TaskItem["priority"];
                   onChange(task, { priority }, { priority });
                 }}
               >
@@ -182,22 +224,20 @@ export function TaskDetail({
             </div>
 
             <div className="space-y-1.5">
-              <Label htmlFor="task-estimate">Estimate (minutes)</Label>
+              <Label htmlFor="task-estimate">Time (minutes)</Label>
               <Input
                 id="task-estimate"
                 type="number"
+                inputMode="numeric"
                 min={1}
                 max={1440}
-                value={task.estimatedMinutes ?? ""}
-                onChange={(event) => {
-                  const value = event.target.value
-                    ? Number(event.target.value)
-                    : null;
-                  onChange(
-                    task,
-                    { estimatedMinutes: value },
-                    { estimatedMinutes: value },
-                  );
+                required
+                value={minutes}
+                aria-invalid={parseMinutes(minutes) === null}
+                onChange={(event) => setMinutes(event.target.value)}
+                onBlur={commitMinutes}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
                 }}
               />
             </div>
@@ -210,13 +250,14 @@ export function TaskDetail({
                 value={due}
                 onChange={(event) => {
                   setDue(event.target.value);
-                  if (isCompleteDateKey(event.target.value)) commitDue(event.target.value);
+                  if (isCompleteDateKey(event.target.value))
+                    commitDue(event.target.value);
                 }}
                 onBlur={(event) => commitDue(event.target.value)}
               />
             </div>
 
-            <div className="space-y-1.5">
+            <div className="col-span-2 space-y-1.5">
               <Label htmlFor="task-list">List</Label>
               <select
                 id="task-list"
