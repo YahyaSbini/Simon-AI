@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { dayBlock } from "@/db/schema";
+import { blockFieldsOf, findActivity } from "@/lib/activities";
 import { getDayBlocks, serializeDayBlock } from "@/lib/data";
 import { requireUserId } from "@/lib/session";
 import { dayBlockInput } from "@/lib/validation";
@@ -26,14 +27,24 @@ export async function POST(request: Request) {
 
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Check the block's days, times, and name or emoji." },
+      { error: "Check the block's days, times and activity." },
+      { status: 400 },
+    );
+  }
+
+  const { activityId, ...times } = parsed.data;
+  const source = await findActivity(userId, activityId);
+
+  if (!source) {
+    return NextResponse.json(
+      { error: "Choose one of your activities." },
       { status: 400 },
     );
   }
 
   const [created] = await db
     .insert(dayBlock)
-    .values({ ...parsed.data, userId })
+    .values({ ...times, ...blockFieldsOf(source), userId })
     .returning();
 
   return NextResponse.json(

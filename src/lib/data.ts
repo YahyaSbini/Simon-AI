@@ -19,6 +19,7 @@ import type {
   TaskStep,
 } from "@/db/schema";
 import {
+  activity,
   dayBlock,
   timeSection,
   timeSectionItem,
@@ -33,6 +34,7 @@ import {
 import { addDays, fromDateKey, toDateKey } from "@/lib/dates";
 import { describeRecurrence, occursOn } from "@/lib/routines";
 import type {
+  ActivityItem,
   DayBlockItem,
   TimeSectionItem,
   ListItem,
@@ -351,7 +353,18 @@ export function serializeDayBlock(row: DayBlock): DayBlockItem {
     label: row.label,
     emoji: row.emoji,
     color: row.color,
+    activityId: row.activityId,
   };
+}
+
+export async function getActivities(userId: string): Promise<ActivityItem[]> {
+  const rows = await db
+    .select()
+    .from(activity)
+    .where(eq(activity.userId, userId))
+    .orderBy(asc(activity.position), asc(activity.createdAt));
+
+  return rows.map(({ id, name, emoji, color }) => ({ id, name, emoji, color }));
 }
 
 export async function getDayBlocks(userId: string): Promise<DayBlockItem[]> {

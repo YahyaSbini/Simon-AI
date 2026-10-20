@@ -13,6 +13,14 @@ export type DayBlockItem = {
   label: string;
   emoji: string | null;
   color: string | null;
+  activityId: string | null;
+};
+
+export type ActivityItem = {
+  id: string;
+  name: string;
+  emoji: string | null;
+  color: string | null;
 };
 
 export type TimeSectionEntry = {
