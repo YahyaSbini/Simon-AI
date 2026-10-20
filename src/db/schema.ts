@@ -260,6 +260,59 @@ export const activity = pgTable(
   (t) => [index("activity_user_id_idx").on(t.userId)],
 );
 
+export const activityGroupKind = pgEnum("activity_group_kind", [
+  "investment",
+  "hobby",
+]);
+
+/**
+ * A list of activities: an "investment" is anchored to one main activity
+ * (things to do during it); a "hobby" is a named category.
+ */
+export const activityGroup = pgTable(
+  "activity_group",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    kind: activityGroupKind("kind").notNull(),
+    activityId: uuid("activity_id").references(() => activity.id, {
+      onDelete: "cascade",
+    }),
+    name: text("name"),
+    emoji: text("emoji"),
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("activity_group_user_kind_idx").on(t.userId, t.kind),
+    uniqueIndex("activity_group_activity_idx").on(t.activityId),
+  ],
+);
+
+export const activityGroupMember = pgTable(
+  "activity_group_member",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    groupId: uuid("group_id")
+      .notNull()
+      .references(() => activityGroup.id, { onDelete: "cascade" }),
+    activityId: uuid("activity_id")
+      .notNull()
+      .references(() => activity.id, { onDelete: "cascade" }),
+    position: integer("position").notNull().default(0),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("activity_group_member_unique_idx").on(t.groupId, t.activityId),
+  ],
+);
+
 export const dayBlock = pgTable(
   "day_block",
   {
@@ -296,6 +349,7 @@ export const timeSection = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
+    collapsed: boolean("collapsed").notNull().default(false),
     position: integer("position").notNull().default(0),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
@@ -419,6 +473,8 @@ export const savingsGoal = pgTable(
 export type List = typeof list.$inferSelect;
 export type DayBlock = typeof dayBlock.$inferSelect;
 export type Activity = typeof activity.$inferSelect;
+export type ActivityGroup = typeof activityGroup.$inferSelect;
+export type ActivityGroupKind = (typeof activityGroupKind.enumValues)[number];
 export type TimeSection = typeof timeSection.$inferSelect;
 export type TimeSectionItemRow = typeof timeSectionItem.$inferSelect;
 export type Task = typeof task.$inferSelect;

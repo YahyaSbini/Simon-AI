@@ -95,6 +95,33 @@ export const timeSectionInput = z.object({
   title: z.string().trim().min(1).max(80),
 });
 
+export const timeSectionUpdate = z
+  .object({
+    title: z.string().trim().min(1).max(80),
+    collapsed: z.boolean(),
+  })
+  .partial()
+  .refine((value) => Object.keys(value).length > 0);
+
+const groupName = z.string().trim().min(1).max(80);
+const groupEmoji = z.string().trim().max(16).nullish();
+
+export const activityGroupInput = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("investment"), activityId: z.string().uuid() }),
+  z.object({ kind: z.literal("hobby"), name: groupName, emoji: groupEmoji }),
+]);
+
+export const activityGroupUpdate = z
+  .object({ name: groupName, emoji: groupEmoji })
+  .partial();
+
+export const activityGroupReorder = z.object({
+  kind: z.enum(["investment", "hobby"]),
+  ids: z.array(z.string().uuid()).min(1).max(500),
+});
+
+export const groupMemberInput = z.object({ activityId: z.string().uuid() });
+
 export const timeSectionItemInput = z.object({
   text: z.string().trim().min(1).max(500),
 });

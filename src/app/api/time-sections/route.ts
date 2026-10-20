@@ -42,7 +42,14 @@ export async function POST(request: Request) {
     .returning();
 
   return NextResponse.json(
-    { section: { id: created.id, title: created.title, items: [] } },
+    {
+      section: {
+        id: created.id,
+        title: created.title,
+        collapsed: created.collapsed,
+        items: [],
+      },
+    },
     { status: 201 },
   );
 }
