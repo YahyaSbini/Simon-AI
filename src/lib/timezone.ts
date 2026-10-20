@@ -34,13 +34,18 @@ export function dayRangeIn(
   date: string,
   timeZone: string,
 ): { start: Date; end: Date } {
-  const naiveMidnight = new Date(`${date}T00:00:00Z`);
-  const start = new Date(
-    naiveMidnight.getTime() - offsetMs(naiveMidnight, timeZone),
-  );
-  const end = new Date(start.getTime() + 86_400_000);
+  const next = new Date(`${date}T00:00:00Z`);
+  next.setUTCDate(next.getUTCDate() + 1);
 
-  return { start, end };
+  return {
+    start: localMidnight(date, timeZone),
+    end: localMidnight(next.toISOString().slice(0, 10), timeZone),
+  };
+}
+
+function localMidnight(date: string, timeZone: string): Date {
+  const naiveMidnight = new Date(`${date}T00:00:00Z`);
+  return new Date(naiveMidnight.getTime() - offsetMs(naiveMidnight, timeZone));
 }
 
 function offsetMs(at: Date, timeZone: string): number {

@@ -81,31 +81,47 @@ async function fetchGoogleEvents(
     return { connected: true, failed: true, items: [] };
   }
 
-  const url = new URL(
-    "https://www.googleapis.com/calendar/v3/calendars/primary/events",
-  );
-  url.searchParams.set("timeMin", timeMin.toISOString());
-  url.searchParams.set("timeMax", timeMax.toISOString());
-  url.searchParams.set("singleEvents", "true");
-  url.searchParams.set("orderBy", "startTime");
-  url.searchParams.set("maxResults", String(maxResults));
-  url.searchParams.set("timeZone", timeZone);
+  const items: GoogleEvent[] = [];
+  let pageToken: string | undefined;
 
-  const response = await fetch(url, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-    cache: "no-store",
-  });
+  try {
+    do {
+      const url = new URL(
+        "https://www.googleapis.com/calendar/v3/calendars/primary/events",
+      );
+      url.searchParams.set("timeMin", timeMin.toISOString());
+      url.searchParams.set("timeMax", timeMax.toISOString());
+      url.searchParams.set("singleEvents", "true");
+      url.searchParams.set("orderBy", "startTime");
+      url.searchParams.set("maxResults", String(maxResults));
+      url.searchParams.set("timeZone", timeZone);
+      if (pageToken) url.searchParams.set("pageToken", pageToken);
 
-  if (!response.ok) {
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+        cache: "no-store",
+      });
+
+      if (!response.ok) {
+        return { connected: true, failed: true, items: [] };
+      }
+
+      const payload = (await response.json()) as {
+        items?: GoogleEvent[];
+        nextPageToken?: string;
+      };
+      items.push(...(payload.items ?? []));
+      pageToken = payload.nextPageToken;
+    } while (pageToken);
+  } catch {
     return { connected: true, failed: true, items: [] };
   }
 
-  const payload = (await response.json()) as { items?: GoogleEvent[] };
-  const items = (payload.items ?? []).filter(
-    (item) => item.status !== "cancelled",
-  );
-
-  return { connected: true, failed: false, items };
+  return {
+    connected: true,
+    failed: false,
+    items: items.filter((item) => item.status !== "cancelled"),
+  };
 }
 
 /** Events from the user's primary Google calendar for a single local day. */
@@ -213,7 +229,14 @@ export async function getCalendarWeek(
       for (const date of dates) {
         if (date < from.date || date > to.date) continue;
         const start = date === from.date ? from.minutes : 0;
-        const end = date === to.date ? to.minutes : 1440;
+        let end = date === to.date ? to.minutes : 1440;
+        if (end <= start && from.date === to.date) {
+          // Clocks fell back during the event, so its end reads earlier than its start.
+          const minutes =
+            (Date.parse(item.end.dateTime) - Date.parse(item.start.dateTime)) /
+            60_000;
+          end = Math.min(1440, start + minutes);
+        }
         if (end <= start) continue;
         events.push({
           key: `${item.id}-${date}`,
