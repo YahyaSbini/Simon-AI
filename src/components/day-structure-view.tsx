@@ -11,7 +11,8 @@ import {
   X,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -111,6 +112,18 @@ export function DayStructureView({
   const [saving, setSaving] = useState(false);
   const latest = useRef(blocks);
   latest.current = blocks;
+  const router = useRouter();
+
+  useEffect(() => {
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 5, 0);
+    const timer = setTimeout(
+      () => router.refresh(),
+      midnight.getTime() - now.getTime(),
+    );
+    return () => clearTimeout(timer);
+  }, [router, today]);
 
   const visible = useMemo(() => blocksOn(blocks, day), [blocks, day]);
   const slots = useMemo(() => slotsFor(visible), [visible]);
