@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/db";
 import { routine } from "@/db/schema";
 import { requireUserId } from "@/lib/session";
+import { resolveLinks } from "@/lib/task-links";
 import { routineInput, validDateRange } from "@/lib/validation";
 
 const updateRoutineSchema = routineInput.partial();
@@ -27,20 +28,28 @@ export async function PATCH(request: Request, { params }: RouteContext) {
 
   const { id } = await params;
 
-  if (parsed.data.startDate !== undefined || parsed.data.endDate !== undefined) {
+  if (
+    parsed.data.startDate !== undefined ||
+    parsed.data.endDate !== undefined
+  ) {
     const [existing] = await db
       .select({ startDate: routine.startDate, endDate: routine.endDate })
       .from(routine)
       .where(and(eq(routine.id, id), eq(routine.userId, userId)));
 
     if (!existing) {
-      return NextResponse.json({ error: "Routine not found." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Routine not found." },
+        { status: 404 },
+      );
     }
 
     const merged = {
       startDate: parsed.data.startDate ?? existing.startDate,
       endDate:
-        parsed.data.endDate === undefined ? existing.endDate : parsed.data.endDate,
+        parsed.data.endDate === undefined
+          ? existing.endDate
+          : parsed.data.endDate,
     };
 
     if (!validDateRange(merged)) {
@@ -51,9 +60,55 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     }
   }
 
+  const fields = parsed.data;
+
+  if (
+    fields.type !== undefined ||
+    fields.parentRoutineId !== undefined ||
+    fields.activityId !== undefined
+  ) {
+    const [existing] = await db
+      .select({
+        type: routine.type,
+        parentRoutineId: routine.parentRoutineId,
+        activityId: routine.activityId,
+      })
+      .from(routine)
+      .where(and(eq(routine.id, id), eq(routine.userId, userId)));
+
+    if (!existing) {
+      return NextResponse.json(
+        { error: "Routine not found." },
+        { status: 404 },
+      );
+    }
+
+    const links = await resolveLinks(userId, "routine", id, {
+      type: fields.type ?? existing.type,
+      parentId:
+        fields.parentRoutineId === undefined
+          ? existing.parentRoutineId
+          : fields.parentRoutineId,
+      activityId:
+        fields.activityId === undefined
+          ? existing.activityId
+          : fields.activityId,
+    });
+
+    if ("error" in links) {
+      return NextResponse.json(
+        { error: links.error },
+        { status: links.status },
+      );
+    }
+
+    fields.parentRoutineId = links.parentId;
+    fields.activityId = links.activityId;
+  }
+
   const [updated] = await db
     .update(routine)
-    .set({ ...parsed.data, updatedAt: new Date() })
+    .set({ ...fields, updatedAt: new Date() })
     .where(and(eq(routine.id, id), eq(routine.userId, userId)))
     .returning();
 

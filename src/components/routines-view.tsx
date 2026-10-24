@@ -3,6 +3,7 @@
 import { Pencil, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { LinkMeta } from "@/components/task-links";
 import { RoutineEditor } from "@/components/routine-editor";
 import { SortableList, SortableRow } from "@/components/sortable-list";
 import { StarButton } from "@/components/task-bits";
@@ -155,6 +156,14 @@ export function RoutinesView({
                   ]
                     .filter(Boolean)
                     .join(" · ")}
+                </span>
+                <span className="text-muted-foreground block truncate text-xs">
+                  <LinkMeta
+                    kind="routine"
+                    type={routine.type}
+                    parentId={routine.parentRoutineId}
+                    activityId={routine.activityId}
+                  />
                 </span>
               </button>
               <StarButton

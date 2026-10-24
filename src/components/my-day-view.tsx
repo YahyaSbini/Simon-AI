@@ -13,6 +13,12 @@ import {
 } from "@/components/task-bits";
 import { TaskDetail } from "@/components/task-detail";
 import { useTasks, useTaskStore } from "@/components/task-store";
+import {
+  LinkFields,
+  LinkMeta,
+  needsLink,
+  refreshLinkTargets,
+} from "@/components/task-links";
 import { TaskRows } from "@/components/task-view";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -56,6 +62,11 @@ export function MyDayView({
   const [title, setTitle] = useState("");
   const [minutes, setMinutes] = useState(String(defaultMinutes));
   const [type, setType] = useState<TaskType>("independent");
+  const [link, setLink] = useState<{
+    parentId: string | null;
+    activityId: string | null;
+  }>({ parentId: null, activityId: null });
+  const linkMissing = needsLink(type) && !link.parentId && !link.activityId;
   const [openTaskId, setOpenTaskId] = useState<string | null>(null);
   const [openRoutineKey, setOpenRoutineKey] = useState<string | null>(null);
   const [leaving, setLeaving] = useState<Set<string>>(() => new Set());
@@ -85,13 +96,16 @@ export function MyDayView({
     const trimmed = title.trim();
     const estimatedMinutes = parseMinutes(minutes);
 
-    if (!trimmed || estimatedMinutes === null) return;
+    if (!trimmed || estimatedMinutes === null || linkMissing) return;
 
     startTransition(async () => {
       const created = await store.createTask({
         title: trimmed,
         estimatedMinutes,
         type,
+        ...(needsLink(type)
+          ? { parentTaskId: link.parentId, activityId: link.activityId }
+          : {}),
         myDayDate: date,
         dueAt: new Date(`${date}T12:00:00`).toISOString(),
       });
@@ -99,6 +113,8 @@ export function MyDayView({
         setTitle("");
         setMinutes(String(defaultMinutes));
         setType("independent");
+        setLink({ parentId: null, activityId: null });
+        void refreshLinkTargets();
       }
     });
   }
@@ -344,6 +360,12 @@ export function MyDayView({
                     </span>
                     <span className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-3 text-xs">
                       <span>{taskTypeLabels[item.type]}</span>
+                      <LinkMeta
+                        kind="routine"
+                        type={item.type}
+                        parentId={item.parentRoutineId}
+                        activityId={item.activityId}
+                      />
                       {routineTime(item) && (
                         <span className="sm:hidden">{routineTime(item)}</span>
                       )}
@@ -404,13 +426,26 @@ export function MyDayView({
             onTypeChange={setType}
             className="h-10"
           />
+          {needsLink(type) && (
+            <LinkFields
+              kind="task"
+              compact
+              className="h-10"
+              parentId={link.parentId}
+              activityId={link.activityId}
+              onChange={(parentId, activityId) =>
+                setLink({ parentId, activityId })
+              }
+            />
+          )}
           <Button
             type="submit"
             className="ml-auto h-10 sm:ml-0"
             disabled={
               pending ||
               title.trim().length === 0 ||
-              parseMinutes(minutes) === null
+              parseMinutes(minutes) === null ||
+              linkMissing
             }
           >
             Add

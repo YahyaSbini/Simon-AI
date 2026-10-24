@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { list, task } from "@/db/schema";
 import { requireUserId } from "@/lib/session";
+import { resolveLinks } from "@/lib/task-links";
 import { dateKey, minutes, taskType, timestamp } from "@/lib/validation";
 
 const createTaskSchema = z.object({
@@ -13,6 +14,8 @@ const createTaskSchema = z.object({
   priority: z.enum(["none", "low", "medium", "high"]).optional(),
   estimatedMinutes: minutes,
   type: taskType,
+  parentTaskId: z.string().uuid().nullish(),
+  activityId: z.string().uuid().nullish(),
   dueAt: timestamp.nullish(),
   myDayDate: dateKey.nullish(),
 });
@@ -55,7 +58,17 @@ export async function POST(request: Request) {
     );
   }
 
-  const { listId, ...fields } = parsed.data;
+  const { listId, parentTaskId, activityId, ...fields } = parsed.data;
+
+  const links = await resolveLinks(userId, "task", null, {
+    type: fields.type,
+    parentId: parentTaskId ?? null,
+    activityId: activityId ?? null,
+  });
+
+  if ("error" in links) {
+    return NextResponse.json({ error: links.error }, { status: links.status });
+  }
 
   if (listId) {
     const [owned] = await db
@@ -75,7 +88,14 @@ export async function POST(request: Request) {
 
   const [created] = await db
     .insert(task)
-    .values({ ...fields, listId: listId ?? null, userId, position: next })
+    .values({
+      ...fields,
+      parentTaskId: links.parentId,
+      activityId: links.activityId,
+      listId: listId ?? null,
+      userId,
+      position: next,
+    })
     .returning();
 
   return NextResponse.json({ task: created }, { status: 201 });

@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { routine } from "@/db/schema";
 import { today } from "@/lib/dates";
 import { requireUserId } from "@/lib/session";
+import { resolveLinks } from "@/lib/task-links";
 import { routineInput, validDateRange } from "@/lib/validation";
 
 export async function GET() {
@@ -17,7 +18,11 @@ export async function GET() {
     .select()
     .from(routine)
     .where(eq(routine.userId, userId))
-    .orderBy(asc(routine.position), asc(routine.timeOfDay), asc(routine.createdAt));
+    .orderBy(
+      asc(routine.position),
+      asc(routine.timeOfDay),
+      asc(routine.createdAt),
+    );
 
   return NextResponse.json({ routines });
 }
@@ -47,6 +52,16 @@ export async function POST(request: Request) {
     );
   }
 
+  const links = await resolveLinks(userId, "routine", null, {
+    type: parsed.data.type,
+    parentId: parsed.data.parentRoutineId ?? null,
+    activityId: parsed.data.activityId ?? null,
+  });
+
+  if ("error" in links) {
+    return NextResponse.json({ error: links.error }, { status: links.status });
+  }
+
   const [{ next }] = await db
     .select({ next: sql<number>`coalesce(max(${routine.position}), -1) + 1` })
     .from(routine)
@@ -54,7 +69,14 @@ export async function POST(request: Request) {
 
   const [created] = await db
     .insert(routine)
-    .values({ ...parsed.data, startDate, userId, position: next })
+    .values({
+      ...parsed.data,
+      parentRoutineId: links.parentId,
+      activityId: links.activityId,
+      startDate,
+      userId,
+      position: next,
+    })
     .returning();
 
   return NextResponse.json({ routine: created }, { status: 201 });

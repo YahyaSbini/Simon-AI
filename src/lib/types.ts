@@ -95,6 +95,8 @@ export type TaskItem = {
   important: boolean;
   estimatedMinutes: number;
   type: TaskType;
+  parentTaskId: string | null;
+  activityId: string | null;
   dueAt: string | null;
   myDayDate: string | null;
   completed: boolean;
@@ -110,6 +112,8 @@ export type RoutineItem = {
   important: boolean;
   estimatedMinutes: number;
   type: TaskType;
+  parentRoutineId: string | null;
+  activityId: string | null;
   frequency: Frequency;
   interval: number;
   byWeekday: number[] | null;

@@ -4,6 +4,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { list, task } from "@/db/schema";
 import { requireUserId } from "@/lib/session";
+import { resolveLinks } from "@/lib/task-links";
 import { dateKey, minutes, taskType, timestamp } from "@/lib/validation";
 
 const updateTaskSchema = z.object({
@@ -14,6 +15,8 @@ const updateTaskSchema = z.object({
   important: z.boolean().optional(),
   estimatedMinutes: minutes.optional(),
   type: taskType.optional(),
+  parentTaskId: z.string().uuid().nullish(),
+  activityId: z.string().uuid().nullish(),
   dueAt: timestamp.nullish(),
   myDayDate: dateKey.nullish(),
   completed: z.boolean().optional(),
@@ -31,7 +34,10 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   const parsed = updateTaskSchema.safeParse(await request.json());
 
   if (!parsed.success) {
-    return NextResponse.json({ error: "Invalid task update." }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid task update." },
+      { status: 400 },
+    );
   }
 
   const { completed, ...fields } = parsed.data;
@@ -46,6 +52,47 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     if (!owned) {
       return NextResponse.json({ error: "List not found." }, { status: 404 });
     }
+  }
+
+  if (
+    fields.type !== undefined ||
+    fields.parentTaskId !== undefined ||
+    fields.activityId !== undefined
+  ) {
+    const [existing] = await db
+      .select({
+        type: task.type,
+        parentTaskId: task.parentTaskId,
+        activityId: task.activityId,
+      })
+      .from(task)
+      .where(and(eq(task.id, id), eq(task.userId, userId)));
+
+    if (!existing) {
+      return NextResponse.json({ error: "Task not found." }, { status: 404 });
+    }
+
+    const links = await resolveLinks(userId, "task", id, {
+      type: fields.type ?? existing.type,
+      parentId:
+        fields.parentTaskId === undefined
+          ? existing.parentTaskId
+          : fields.parentTaskId,
+      activityId:
+        fields.activityId === undefined
+          ? existing.activityId
+          : fields.activityId,
+    });
+
+    if ("error" in links) {
+      return NextResponse.json(
+        { error: links.error },
+        { status: links.status },
+      );
+    }
+
+    fields.parentTaskId = links.parentId;
+    fields.activityId = links.activityId;
   }
 
   const [updated] = await db

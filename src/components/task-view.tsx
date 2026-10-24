@@ -10,6 +10,12 @@ import {
 } from "@/components/task-bits";
 import { useOpenParam } from "@/components/use-open-param";
 import { TaskDetail } from "@/components/task-detail";
+import {
+  LinkFields,
+  LinkMeta,
+  needsLink,
+  refreshLinkTargets,
+} from "@/components/task-links";
 import { useTasks, useTaskStore } from "@/components/task-store";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -71,6 +77,11 @@ export function TaskView({
   const [title, setTitle] = useState("");
   const [minutes, setMinutes] = useState(String(defaultMinutes));
   const [type, setType] = useState<TaskType>("independent");
+  const [link, setLink] = useState<{
+    parentId: string | null;
+    activityId: string | null;
+  }>({ parentId: null, activityId: null });
+  const linkMissing = needsLink(type) && !link.parentId && !link.activityId;
   const [openTaskId, setOpenTaskId] = useOpenParam();
   const [pending, startTransition] = useTransition();
 
@@ -82,19 +93,24 @@ export function TaskView({
     const trimmed = title.trim();
     const estimatedMinutes = parseMinutes(minutes);
 
-    if (!trimmed || estimatedMinutes === null) return;
+    if (!trimmed || estimatedMinutes === null || linkMissing) return;
 
     startTransition(async () => {
       const created = await store.createTask({
         title: trimmed,
         estimatedMinutes,
         type,
+        ...(needsLink(type)
+          ? { parentTaskId: link.parentId, activityId: link.activityId }
+          : {}),
         listId,
       });
       if (created) {
         setTitle("");
         setMinutes(String(defaultMinutes));
         setType("independent");
+        setLink({ parentId: null, activityId: null });
+        void refreshLinkTargets();
       }
     });
   }
@@ -122,13 +138,25 @@ export function TaskView({
             onMinutesChange={setMinutes}
             onTypeChange={setType}
           />
+          {needsLink(type) && (
+            <LinkFields
+              kind="task"
+              compact
+              parentId={link.parentId}
+              activityId={link.activityId}
+              onChange={(parentId, activityId) =>
+                setLink({ parentId, activityId })
+              }
+            />
+          )}
           <Button
             type="submit"
             className="ml-auto sm:ml-0"
             disabled={
               pending ||
               title.trim().length === 0 ||
-              parseMinutes(minutes) === null
+              parseMinutes(minutes) === null ||
+              linkMissing
             }
           >
             Add
@@ -264,6 +292,13 @@ export function TaskMeta({ task }: { task: TaskItem }) {
   const doneSteps = task.steps.filter((step) => step.completed).length;
   const parts: React.ReactNode[] = [
     <span key="type">{taskTypeLabels[task.type]}</span>,
+    <LinkMeta
+      key="link"
+      kind="task"
+      type={task.type}
+      parentId={task.parentTaskId}
+      activityId={task.activityId}
+    />,
   ];
 
   if (task.myDayDate === today()) {
