@@ -27,6 +27,7 @@ type TaskStore = {
   createTask: (body: {
     title: string;
     estimatedMinutes: number;
+    countInTime?: boolean;
     type: TaskType;
     parentTaskId?: string | null;
     activityId?: string | null;
@@ -135,6 +136,7 @@ export function TaskStoreProvider({ children }: { children: React.ReactNode }) {
         priority: task.priority,
         important: task.important ?? false,
         estimatedMinutes: task.estimatedMinutes,
+        countInTime: task.countInTime ?? false,
         type: task.type,
         parentTaskId: task.parentTaskId ?? null,
         activityId: task.activityId ?? null,

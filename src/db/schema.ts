@@ -105,6 +105,7 @@ export const task = pgTable(
     priority: priority("priority").notNull().default("none"),
     important: boolean("important").notNull().default(false),
     estimatedMinutes: integer("estimated_minutes").notNull().default(15),
+    countInTime: boolean("count_in_time").notNull().default(false),
     type: taskType("type").notNull().default("independent"),
     /** Dependent/hybrid tasks hang under another task, an activity, or both. */
     parentTaskId: uuid("parent_task_id").references(
@@ -159,6 +160,7 @@ export const routine = pgTable(
     priority: priority("priority").notNull().default("none"),
     important: boolean("important").notNull().default(false),
     estimatedMinutes: integer("estimated_minutes").notNull(),
+    countInTime: boolean("count_in_time").notNull().default(true),
     type: taskType("type").notNull().default("independent"),
     /** Dependent/hybrid routines hang under another routine, an activity, or both. */
     parentRoutineId: uuid("parent_routine_id").references(

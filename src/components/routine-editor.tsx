@@ -53,6 +53,7 @@ type Draft = {
   startDate: string;
   endDate: string;
   carryOver: boolean;
+  countInTime: boolean;
 };
 
 function emptyDraft(): Draft {
@@ -75,6 +76,7 @@ function emptyDraft(): Draft {
     startDate: today(),
     endDate: "",
     carryOver: false,
+    countInTime: true,
   };
 }
 
@@ -97,6 +99,7 @@ function toDraft(routine: RoutineItem): Draft {
     startDate: routine.startDate,
     endDate: routine.endDate ?? "",
     carryOver: routine.carryOver,
+    countInTime: routine.countInTime,
   };
 }
 
@@ -186,6 +189,7 @@ export function RoutineEditor({
       startDate: isDateKey(draft.startDate) ? draft.startDate : today(),
       endDate: isDateKey(draft.endDate) ? draft.endDate : null,
       carryOver: draft.carryOver,
+      countInTime: draft.countInTime,
     };
 
     setSaving(true);
@@ -447,6 +451,28 @@ export function RoutineEditor({
               <span className="text-muted-foreground block text-xs">
                 Unticked days stay in My Day as overdue until you tick them.
                 Off: a missed day simply disappears.
+              </span>
+            </span>
+          </label>
+
+          <label
+            htmlFor="routine-count-in-time"
+            className="flex cursor-pointer items-start gap-3 py-1"
+          >
+            <Checkbox
+              id="routine-count-in-time"
+              checked={draft.countInTime}
+              onCheckedChange={(checked) =>
+                setDraft({ ...draft, countInTime: checked === true })
+              }
+              className="mt-0.5"
+            />
+            <span className="space-y-0.5">
+              <span className="block text-sm leading-none font-medium">
+                Count in time
+              </span>
+              <span className="text-muted-foreground block text-xs">
+                Include its minutes when time is added up.
               </span>
             </span>
           </label>

@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, Clock, Sun, Trash2 } from "lucide-react";
+import { CalendarClock, Clock, Sun, Timer, Trash2 } from "lucide-react";
 import { useCallback, useMemo, useState, useTransition } from "react";
 import { SortableList, SortableRow } from "@/components/sortable-list";
 import {
@@ -77,6 +77,7 @@ export function TaskView({
   const [title, setTitle] = useState("");
   const [minutes, setMinutes] = useState(String(defaultMinutes));
   const [type, setType] = useState<TaskType>("independent");
+  const [countInTime, setCountInTime] = useState(false);
   const [link, setLink] = useState<{
     parentId: string | null;
     activityId: string | null;
@@ -99,6 +100,7 @@ export function TaskView({
       const created = await store.createTask({
         title: trimmed,
         estimatedMinutes,
+        countInTime,
         type,
         ...(needsLink(type)
           ? { parentTaskId: link.parentId, activityId: link.activityId }
@@ -109,6 +111,7 @@ export function TaskView({
         setTitle("");
         setMinutes(String(defaultMinutes));
         setType("independent");
+        setCountInTime(false);
         setLink({ parentId: null, activityId: null });
         void refreshLinkTargets();
       }
@@ -137,6 +140,8 @@ export function TaskView({
             type={type}
             onMinutesChange={setMinutes}
             onTypeChange={setType}
+            countInTime={countInTime}
+            onCountInTimeChange={setCountInTime}
           />
           {needsLink(type) && (
             <LinkFields
@@ -322,6 +327,14 @@ export function TaskMeta({ task }: { task: TaskItem }) {
       <span key="estimate" className="inline-flex items-center gap-1 sm:hidden">
         <Clock className="size-3" />
         {formatMinutes(task.estimatedMinutes)}
+      </span>,
+    );
+  }
+  if (task.countInTime) {
+    parts.push(
+      <span key="count" className="inline-flex items-center gap-1">
+        <Timer className="size-3" />
+        Counts in time
       </span>,
     );
   }

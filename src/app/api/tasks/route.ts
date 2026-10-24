@@ -16,6 +16,7 @@ const createTaskSchema = z.object({
   type: taskType,
   parentTaskId: z.string().uuid().nullish(),
   activityId: z.string().uuid().nullish(),
+  countInTime: z.boolean().optional(),
   dueAt: timestamp.nullish(),
   myDayDate: dateKey.nullish(),
 });

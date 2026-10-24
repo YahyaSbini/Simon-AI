@@ -318,6 +318,29 @@ export function TaskDetail({
             />
           )}
 
+          <label
+            htmlFor="task-count-in-time"
+            className="flex cursor-pointer items-start gap-3 py-1"
+          >
+            <Checkbox
+              id="task-count-in-time"
+              checked={task.countInTime}
+              onCheckedChange={(checked) => {
+                const countInTime = checked === true;
+                onChange(task, { countInTime }, { countInTime });
+              }}
+              className="mt-0.5"
+            />
+            <span className="space-y-0.5">
+              <span className="block text-sm leading-none font-medium">
+                Count in time
+              </span>
+              <span className="text-muted-foreground block text-xs">
+                Include its minutes when time is added up.
+              </span>
+            </span>
+          </label>
+
           <StepEditor
             steps={task.steps}
             onChange={(steps) => onStepsChange(task.id, steps)}

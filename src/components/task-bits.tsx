@@ -1,6 +1,6 @@
 "use client";
 
-import { Star } from "lucide-react";
+import { Star, Timer } from "lucide-react";
 import type { TaskType } from "@/db/schema";
 import { Input } from "@/components/ui/input";
 import { taskTypes, type TaskItem } from "@/lib/types";
@@ -120,12 +120,16 @@ export function TaskSetupFields({
   type,
   onMinutesChange,
   onTypeChange,
+  countInTime,
+  onCountInTimeChange,
   className,
 }: {
   minutes: string;
   type: TaskType;
   onMinutesChange: (value: string) => void;
   onTypeChange: (value: TaskType) => void;
+  countInTime?: boolean;
+  onCountInTimeChange?: (value: boolean) => void;
   className?: string;
 }) {
   return (
@@ -160,6 +164,28 @@ export function TaskSetupFields({
           </option>
         ))}
       </select>
+      {onCountInTimeChange && (
+        <button
+          type="button"
+          aria-pressed={countInTime}
+          aria-label="Count in time"
+          title={countInTime ? "Counts in time" : "Not counted in time"}
+          onClick={() => onCountInTimeChange(!countInTime)}
+          className={cn(
+            fieldSelectClass,
+            "inline-flex shrink-0 items-center justify-center gap-1.5 px-2.5",
+            countInTime
+              ? "border-primary/40 bg-primary/10 text-primary"
+              : "text-muted-foreground hover:text-foreground",
+            className,
+          )}
+        >
+          <Timer className="size-4" aria-hidden />
+          <span className="hidden text-xs sm:inline">
+            {countInTime ? "Counted" : "Not counted"}
+          </span>
+        </button>
+      )}
     </>
   );
 }
