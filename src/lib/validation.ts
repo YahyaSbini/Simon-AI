@@ -25,6 +25,8 @@ export const routineInput = z.object({
   important: z.boolean().optional(),
   estimatedMinutes: minutes,
   type: taskType,
+  parentRoutineId: z.string().uuid().nullish(),
+  activityId: z.string().uuid().nullish(),
   frequency: z.enum(["daily", "weekly", "monthly"]),
   interval: z.number().int().min(1).max(365).default(1),
   byWeekday: z.array(z.number().int().min(1).max(7)).nullish(),

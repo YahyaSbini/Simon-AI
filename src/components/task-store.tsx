@@ -28,6 +28,8 @@ type TaskStore = {
     title: string;
     estimatedMinutes: number;
     type: TaskType;
+    parentTaskId?: string | null;
+    activityId?: string | null;
     listId?: string | null;
     myDayDate?: string | null;
     dueAt?: string | null;
@@ -134,6 +136,8 @@ export function TaskStoreProvider({ children }: { children: React.ReactNode }) {
         important: task.important ?? false,
         estimatedMinutes: task.estimatedMinutes,
         type: task.type,
+        parentTaskId: task.parentTaskId ?? null,
+        activityId: task.activityId ?? null,
         dueAt: task.dueAt ?? null,
         myDayDate: task.myDayDate ?? null,
         completed: false,

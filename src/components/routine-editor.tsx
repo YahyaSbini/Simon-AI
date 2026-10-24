@@ -5,6 +5,11 @@ import { toast } from "sonner";
 import { StepEditor } from "@/components/step-editor";
 import { parseMinutes } from "@/components/task-bits";
 import { selectClass } from "@/components/task-detail";
+import {
+  LinkFields,
+  needsLink,
+  refreshLinkTargets,
+} from "@/components/task-links";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -42,6 +47,8 @@ type Draft = {
   timeOfDay: string;
   estimatedMinutes: string;
   type: RoutineItem["type"];
+  parentRoutineId: string | null;
+  activityId: string | null;
   priority: RoutineItem["priority"];
   startDate: string;
   endDate: string;
@@ -62,6 +69,8 @@ function emptyDraft(): Draft {
     timeOfDay: "",
     estimatedMinutes: "",
     type: "independent",
+    parentRoutineId: null,
+    activityId: null,
     priority: "none",
     startDate: today(),
     endDate: "",
@@ -82,6 +91,8 @@ function toDraft(routine: RoutineItem): Draft {
     timeOfDay: routine.timeOfDay ?? "",
     estimatedMinutes: String(routine.estimatedMinutes),
     type: routine.type,
+    parentRoutineId: routine.parentRoutineId,
+    activityId: routine.activityId,
     priority: routine.priority,
     startDate: routine.startDate,
     endDate: routine.endDate ?? "",
@@ -140,6 +151,10 @@ export function RoutineEditor({
       toast.error("Set a time between 1 and 1440 minutes.");
       return;
     }
+    if (needsLink(draft.type) && !draft.parentRoutineId && !draft.activityId) {
+      toast.error("Pick a routine or an activity it depends on.");
+      return;
+    }
     if (draft.endDate && draft.endDate < draft.startDate) {
       toast.error("The end date must be after the start date.");
       return;
@@ -165,6 +180,8 @@ export function RoutineEditor({
       timeOfDay: draft.timeOfDay || null,
       estimatedMinutes,
       type: draft.type,
+      parentRoutineId: needsLink(draft.type) ? draft.parentRoutineId : null,
+      activityId: needsLink(draft.type) ? draft.activityId : null,
       priority: draft.priority,
       startDate: isDateKey(draft.startDate) ? draft.startDate : today(),
       endDate: isDateKey(draft.endDate) ? draft.endDate : null,
@@ -188,6 +205,7 @@ export function RoutineEditor({
     }
 
     const { routine: saved } = await response.json();
+    void refreshLinkTargets();
     onSaved(
       {
         ...saved,
@@ -511,6 +529,18 @@ export function RoutineEditor({
               </select>
             </div>
           </div>
+
+          {needsLink(draft.type) && (
+            <LinkFields
+              kind="routine"
+              selfId={routine?.id}
+              parentId={draft.parentRoutineId}
+              activityId={draft.activityId}
+              onChange={(parentRoutineId, activityId) =>
+                setDraft({ ...draft, parentRoutineId, activityId })
+              }
+            />
+          )}
 
           {routine ? (
             <StepEditor

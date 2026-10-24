@@ -2,6 +2,7 @@
 
 import { Sun, Trash2, X } from "lucide-react";
 import { StepEditor } from "@/components/step-editor";
+import { LinkFields, needsLink } from "@/components/task-links";
 import { parseMinutes, StarButton } from "@/components/task-bits";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,12 @@ export function TaskDetail({
   const [notes, setNotes] = useState("");
   const [due, setDue] = useState("");
   const [minutes, setMinutes] = useState("");
+  /** Dependent/hybrid picked but not saved yet, because it still needs a link. */
+  const [pendingType, setPendingType] = useState<TaskItem["type"] | null>(null);
+
+  useEffect(() => {
+    setPendingType(null);
+  }, [task?.id]);
 
   useEffect(() => {
     setTitle(task?.title ?? "");
@@ -65,6 +72,30 @@ export function TaskDetail({
   if (!task) return null;
 
   const inMyDay = task.myDayDate === today();
+  const shownType = pendingType ?? task.type;
+
+  function changeType(type: TaskItem["type"]) {
+    if (!task) return;
+    if (!needsLink(type)) {
+      setPendingType(null);
+      const changes = { type, parentTaskId: null, activityId: null };
+      onChange(task, changes, changes);
+      return;
+    }
+    if (!task.parentTaskId && !task.activityId) {
+      setPendingType(type);
+      return;
+    }
+    setPendingType(null);
+    onChange(task, { type }, { type });
+  }
+
+  function changeLink(parentTaskId: string | null, activityId: string | null) {
+    if (!task) return;
+    const changes = { type: shownType, parentTaskId, activityId };
+    setPendingType(null);
+    onChange(task, changes, changes);
+  }
 
   function commitTitle() {
     if (!task) return;
@@ -190,11 +221,10 @@ export function TaskDetail({
               <select
                 id="task-type"
                 className={selectClass}
-                value={task.type}
-                onChange={(event) => {
-                  const type = event.target.value as TaskItem["type"];
-                  onChange(task, { type }, { type });
-                }}
+                value={shownType}
+                onChange={(event) =>
+                  changeType(event.target.value as TaskItem["type"])
+                }
               >
                 {taskTypes.map((option) => (
                   <option key={option.value} value={option.value}>
@@ -277,6 +307,16 @@ export function TaskDetail({
               </select>
             </div>
           </div>
+
+          {needsLink(shownType) && (
+            <LinkFields
+              kind="task"
+              selfId={task.id}
+              parentId={task.parentTaskId}
+              activityId={task.activityId}
+              onChange={changeLink}
+            />
+          )}
 
           <StepEditor
             steps={task.steps}

@@ -1,4 +1,5 @@
 import {
+  type AnyPgColumn,
   boolean,
   date,
   index,
@@ -105,6 +106,16 @@ export const task = pgTable(
     important: boolean("important").notNull().default(false),
     estimatedMinutes: integer("estimated_minutes").notNull().default(15),
     type: taskType("type").notNull().default("independent"),
+    /** Dependent/hybrid tasks hang under another task, an activity, or both. */
+    parentTaskId: uuid("parent_task_id").references(
+      (): AnyPgColumn => task.id,
+      {
+        onDelete: "set null",
+      },
+    ),
+    activityId: uuid("activity_id").references((): AnyPgColumn => activity.id, {
+      onDelete: "set null",
+    }),
     dueAt: timestamp("due_at"),
     myDayDate: date("my_day_date"),
     position: integer("position").notNull().default(0),
@@ -149,6 +160,14 @@ export const routine = pgTable(
     important: boolean("important").notNull().default(false),
     estimatedMinutes: integer("estimated_minutes").notNull(),
     type: taskType("type").notNull().default("independent"),
+    /** Dependent/hybrid routines hang under another routine, an activity, or both. */
+    parentRoutineId: uuid("parent_routine_id").references(
+      (): AnyPgColumn => routine.id,
+      { onDelete: "set null" },
+    ),
+    activityId: uuid("activity_id").references((): AnyPgColumn => activity.id, {
+      onDelete: "set null",
+    }),
     frequency: frequency("frequency").notNull().default("daily"),
     /** Repeat every N days/weeks/months, depending on `frequency`. */
     interval: integer("interval").notNull().default(1),
