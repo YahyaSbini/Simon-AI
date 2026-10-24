@@ -1,13 +1,14 @@
 import type { DayBlockItem } from "@/lib/types";
 
+/** Display order: the week starts on Saturday. Values stay ISO (Mon = 1 … Sun = 7). */
 export const weekdays = [
+  { value: 6, short: "Sat", label: "Saturday" },
+  { value: 7, short: "Sun", label: "Sunday" },
   { value: 1, short: "Mon", label: "Monday" },
   { value: 2, short: "Tue", label: "Tuesday" },
   { value: 3, short: "Wed", label: "Wednesday" },
   { value: 4, short: "Thu", label: "Thursday" },
   { value: 5, short: "Fri", label: "Friday" },
-  { value: 6, short: "Sat", label: "Saturday" },
-  { value: 7, short: "Sun", label: "Sunday" },
 ] as const;
 
 export function isoWeekday(date: string): number {

@@ -1082,9 +1082,9 @@ function WeekGrid({
     <div className="border-border bg-card overflow-x-auto rounded-md border">
       <div className="grid min-w-[46rem] grid-cols-[3.25rem_repeat(7,minmax(0,1fr))] select-none">
         <div className="bg-card border-border sticky left-0 z-30 border-b" />
-        {columns.map(({ day }, index) => {
+        {columns.map(({ day }) => {
           const active = selected === day.value;
-          const date = dates[index];
+          const date = dates[day.value - 1];
           return (
             <button
               key={day.value}
