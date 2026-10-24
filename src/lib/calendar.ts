@@ -196,8 +196,9 @@ function localParts(
 }
 
 /**
- * Google events for the week containing `today`, split per day. Days before
- * `today` are left empty: past days are cleared at local midnight.
+ * Google events for the 7 days starting `today`, split per weekday column.
+ * Columns before today's weekday show next week's date, so at local midnight
+ * the day that ended rolls over to the same weekday next week.
  */
 export async function getCalendarWeek(
   userId: string,
@@ -206,15 +207,16 @@ export async function getCalendarWeek(
 ): Promise<CalendarWeek> {
   const offset = new Date(`${today}T00:00:00Z`).getUTCDay();
   const monday = shiftDate(today, -((offset + 6) % 7));
-  const dates = Array.from({ length: 7 }, (_, index) =>
-    shiftDate(monday, index),
-  );
+  const dates = Array.from({ length: 7 }, (_, index) => {
+    const date = shiftDate(monday, index);
+    return date < today ? shiftDate(date, 7) : date;
+  });
   const weekdayOf = new Map(dates.map((date, index) => [date, index + 1]));
 
   const result = await fetchGoogleEvents(
     userId,
     dayRangeIn(today, timeZone).start,
-    dayRangeIn(dates[6], timeZone).end,
+    dayRangeIn(shiftDate(today, 6), timeZone).end,
     timeZone,
     250,
   );
@@ -230,7 +232,7 @@ export async function getCalendarWeek(
       const to = localParts(item.end.dateTime, timeZone);
 
       for (const date of dates) {
-        if (date < today || date < from.date || date > to.date) continue;
+        if (date < from.date || date > to.date) continue;
         const start = date === from.date ? from.minutes : 0;
         let end = date === to.date ? to.minutes : 1440;
         if (end <= start && from.date === to.date) {
@@ -254,7 +256,7 @@ export async function getCalendarWeek(
     } else if (item.start?.date) {
       const last = item.end?.date ?? shiftDate(item.start.date, 1);
       for (const date of dates) {
-        if (date < today || date < item.start.date || date >= last) continue;
+        if (date < item.start.date || date >= last) continue;
         events.push({
           key: `${item.id}-${date}`,
           title,

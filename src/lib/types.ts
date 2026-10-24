@@ -171,7 +171,7 @@ export type WeekEvent = {
 export type CalendarWeek = {
   connected: boolean;
   failed: boolean;
-  /** `YYYY-MM-DD` for Monday … Sunday of the current week. */
+  /** `YYYY-MM-DD` per Monday … Sunday column: the next 7 days from today. */
   dates: string[];
   events: WeekEvent[];
 };
