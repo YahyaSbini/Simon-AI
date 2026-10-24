@@ -17,6 +17,7 @@ const updateTaskSchema = z.object({
   type: taskType.optional(),
   parentTaskId: z.string().uuid().nullish(),
   activityId: z.string().uuid().nullish(),
+  countInTime: z.boolean().optional(),
   dueAt: timestamp.nullish(),
   myDayDate: dateKey.nullish(),
   completed: z.boolean().optional(),

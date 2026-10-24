@@ -39,6 +39,7 @@ export const routineInput = z.object({
   startDate: dateKey.optional(),
   endDate: dateKey.nullish(),
   carryOver: z.boolean().optional(),
+  countInTime: z.boolean().optional(),
   active: z.boolean().optional(),
 });
 

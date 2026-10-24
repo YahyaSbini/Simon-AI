@@ -94,6 +94,7 @@ export type TaskItem = {
   priority: Priority;
   important: boolean;
   estimatedMinutes: number;
+  countInTime: boolean;
   type: TaskType;
   parentTaskId: string | null;
   activityId: string | null;
@@ -111,6 +112,7 @@ export type RoutineItem = {
   priority: Priority;
   important: boolean;
   estimatedMinutes: number;
+  countInTime: boolean;
   type: TaskType;
   parentRoutineId: string | null;
   activityId: string | null;

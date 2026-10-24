@@ -62,6 +62,7 @@ export function MyDayView({
   const [title, setTitle] = useState("");
   const [minutes, setMinutes] = useState(String(defaultMinutes));
   const [type, setType] = useState<TaskType>("independent");
+  const [countInTime, setCountInTime] = useState(false);
   const [link, setLink] = useState<{
     parentId: string | null;
     activityId: string | null;
@@ -102,6 +103,7 @@ export function MyDayView({
       const created = await store.createTask({
         title: trimmed,
         estimatedMinutes,
+        countInTime,
         type,
         ...(needsLink(type)
           ? { parentTaskId: link.parentId, activityId: link.activityId }
@@ -113,6 +115,7 @@ export function MyDayView({
         setTitle("");
         setMinutes(String(defaultMinutes));
         setType("independent");
+        setCountInTime(false);
         setLink({ parentId: null, activityId: null });
         void refreshLinkTargets();
       }
@@ -369,6 +372,7 @@ export function MyDayView({
                       {routineTime(item) && (
                         <span className="sm:hidden">{routineTime(item)}</span>
                       )}
+                      {item.countInTime && <span>Counts in time</span>}
                       {item.steps.length > 0 && (
                         <span>
                           {`${item.steps.filter((step) => step.completed).length} of ${item.steps.length} steps`}
@@ -424,6 +428,8 @@ export function MyDayView({
             type={type}
             onMinutesChange={setMinutes}
             onTypeChange={setType}
+            countInTime={countInTime}
+            onCountInTimeChange={setCountInTime}
             className="h-10"
           />
           {needsLink(type) && (

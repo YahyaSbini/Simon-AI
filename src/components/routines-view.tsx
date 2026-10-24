@@ -147,6 +147,7 @@ export function RoutinesView({
                     routine.recurrence,
                     routine.timeOfDay,
                     formatMinutes(routine.estimatedMinutes),
+                    routine.countInTime ? "counts in time" : null,
                     routine.priority === "none"
                       ? null
                       : `${priorityLabels[routine.priority]} priority`,
