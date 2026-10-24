@@ -17,7 +17,11 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { isoWeekday, today } from "@/lib/dates";
-import { describeRecurrence, fullWeekdayNames } from "@/lib/routines";
+import {
+  describeRecurrence,
+  fullWeekdayNames,
+  lastDayOfMonth,
+} from "@/lib/routines";
 import {
   priorities,
   type RoutineItem,
@@ -88,7 +92,7 @@ function toDraft(routine: RoutineItem): Draft {
     interval: routine.interval,
     byWeekday: routine.byWeekday ?? [],
     byMonthDay: routine.byMonthDay ?? 1,
-    monthlyOn: routine.byLastWeekday ? "last" : "day",
+    monthlyOn: routine.byLastWeekday === null ? "day" : "last",
     byLastWeekday: routine.byLastWeekday ?? isoWeekday(routine.startDate),
     timeOfDay: routine.timeOfDay ?? "",
     estimatedMinutes: String(routine.estimatedMinutes),
@@ -394,6 +398,7 @@ export function RoutineEditor({
                         {name}
                       </option>
                     ))}
+                    <option value={lastDayOfMonth}>Last day of month</option>
                   </select>
                 </div>
               )}

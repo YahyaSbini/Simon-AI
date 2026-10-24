@@ -31,7 +31,7 @@ export const routineInput = z.object({
   interval: z.number().int().min(1).max(365).default(1),
   byWeekday: z.array(z.number().int().min(1).max(7)).nullish(),
   byMonthDay: z.number().int().min(1).max(31).nullish(),
-  byLastWeekday: z.number().int().min(1).max(7).nullish(),
+  byLastWeekday: z.number().int().min(0).max(7).nullish(),
   timeOfDay: z
     .string()
     .regex(/^\d{2}:\d{2}$/)

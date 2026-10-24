@@ -1,6 +1,9 @@
 import type { Routine } from "@/db/schema";
 import { daysBetween, fromDateKey, isoWeekday } from "@/lib/dates";
 
+/** `byLastWeekday` value meaning the last calendar day of the month (28th–31st). */
+export const lastDayOfMonth = 0;
+
 /** Whether a routine has an occurrence on the given `YYYY-MM-DD` date. */
 export function occursOn(routine: Routine, date: string): boolean {
   if (!routine.active) return false;
@@ -35,7 +38,11 @@ export function occursOn(routine: Routine, date: string): boolean {
       const start = fromDateKey(routine.startDate);
       const current = fromDateKey(date);
 
-      if (routine.byLastWeekday) {
+      if (routine.byLastWeekday === lastDayOfMonth) {
+        const tomorrow = new Date(current);
+        tomorrow.setDate(current.getDate() + 1);
+        if (tomorrow.getMonth() === current.getMonth()) return false;
+      } else if (routine.byLastWeekday) {
         if (isoWeekday(date) !== routine.byLastWeekday) return false;
         const weekLater = new Date(current);
         weekLater.setDate(current.getDate() + 7);
@@ -118,9 +125,12 @@ function describeRule(routine: Routine): string {
         : `Weekly on ${days}`;
     }
     case "monthly": {
-      const day = routine.byLastWeekday
-        ? `the last ${fullWeekdayNames[routine.byLastWeekday - 1]}`
-        : `day ${routine.byMonthDay ?? fromDateKey(routine.startDate).getDate()}`;
+      const day =
+        routine.byLastWeekday === lastDayOfMonth
+          ? "the last day"
+          : routine.byLastWeekday
+            ? `the last ${fullWeekdayNames[routine.byLastWeekday - 1]}`
+            : `day ${routine.byMonthDay ?? fromDateKey(routine.startDate).getDate()}`;
       return routine.interval > 1
         ? `Every ${every}months on ${day}`
         : `Monthly on ${day}`;
