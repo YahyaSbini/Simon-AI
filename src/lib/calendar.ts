@@ -195,7 +195,10 @@ function localParts(
   };
 }
 
-/** Google events for Monday … Sunday of the week containing `today`, split per day. */
+/**
+ * Google events for the week containing `today`, split per day. Days before
+ * `today` are left empty: past days are cleared at local midnight.
+ */
 export async function getCalendarWeek(
   userId: string,
   today: string,
@@ -210,7 +213,7 @@ export async function getCalendarWeek(
 
   const result = await fetchGoogleEvents(
     userId,
-    dayRangeIn(dates[0], timeZone).start,
+    dayRangeIn(today, timeZone).start,
     dayRangeIn(dates[6], timeZone).end,
     timeZone,
     250,
@@ -227,7 +230,7 @@ export async function getCalendarWeek(
       const to = localParts(item.end.dateTime, timeZone);
 
       for (const date of dates) {
-        if (date < from.date || date > to.date) continue;
+        if (date < today || date < from.date || date > to.date) continue;
         const start = date === from.date ? from.minutes : 0;
         let end = date === to.date ? to.minutes : 1440;
         if (end <= start && from.date === to.date) {
@@ -251,7 +254,7 @@ export async function getCalendarWeek(
     } else if (item.start?.date) {
       const last = item.end?.date ?? shiftDate(item.start.date, 1);
       for (const date of dates) {
-        if (date < item.start.date || date >= last) continue;
+        if (date < today || date < item.start.date || date >= last) continue;
         events.push({
           key: `${item.id}-${date}`,
           title,
