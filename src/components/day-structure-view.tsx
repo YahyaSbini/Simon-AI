@@ -27,6 +27,7 @@ import {
   CollapseToggle,
   useClosedSections,
 } from "@/components/collapsible";
+import { TimeCalculation } from "@/components/time-calculation";
 import { Input } from "@/components/ui/input";
 import {
   blocksOn,
@@ -224,120 +225,10 @@ export function DayStructureView({
   const { closed, setOpen } = useClosedSections("time-day-structure-closed");
   const weekOpen = !closed.has("week");
   const dayOpen = !closed.has("day");
+  const timeOpen = !closed.has("time");
 
   return (
     <div className="space-y-8">
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-muted-foreground text-xs tracking-wide uppercase">
-            <CollapseToggle
-              open={weekOpen}
-              controls="day-structure-week"
-              onToggle={() => setOpen(["week"], !weekOpen)}
-            >
-              Week
-            </CollapseToggle>
-          </h2>
-          {week.connected && (
-            <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
-              {week.failed ? (
-                "Couldn't load Google Calendar events."
-              ) : (
-                <>
-                  <span
-                    className="border-azure bg-card size-3 rounded-[3px] border border-l-[3px]"
-                    aria-hidden
-                  />
-                  Google Calendar · this week
-                </>
-              )}
-            </p>
-          )}
-        </div>
-        <CollapseBody id="day-structure-week" open={weekOpen}>
-          <WeekGrid
-            blocks={blocks}
-            events={week.events}
-            dates={week.dates}
-            selected={day}
-            today={today}
-            pending={composing}
-            onSelectDay={selectDay}
-            onPickBlock={(value, block) => {
-              selectDay(value);
-              setComposer({ mode: "edit", block, day: value });
-            }}
-            onCreate={(range) => {
-              selectDay(range.day);
-              setComposer({ mode: "new", range });
-            }}
-          />
-        </CollapseBody>
-      </section>
-
-      <Dialog
-        open={composer !== null}
-        onOpenChange={(open) => !open && setComposer(null)}
-      >
-        {composer && (
-          <DialogContent className="sm:max-w-xl">
-            <DialogHeader>
-              <DialogTitle>
-                {composer.mode === "new" ? "New block" : "Edit block"}
-              </DialogTitle>
-            </DialogHeader>
-            <BlockForm
-              activities={activities}
-              alsoDuring={alsoDuring}
-              initial={
-                composer.mode === "new"
-                  ? {
-                      weekdays: [composer.range.day],
-                      start: fromMinutes(composer.range.from),
-                      end: fromMinutes(composer.range.to),
-                      activityId: null,
-                    }
-                  : draftOf(composer.block)
-              }
-              current={composer.mode === "edit" ? composer.block : undefined}
-              submitLabel={composer.mode === "new" ? "Add block" : "Save"}
-              saving={saving}
-              autoFocus
-              onSubmit={async (draft) => {
-                const ok =
-                  composer.mode === "new"
-                    ? await createBlock(draft)
-                    : await updateBlock(composer.block.id, draft);
-                if (ok) setComposer(null);
-                return ok;
-              }}
-              extra={
-                composer.mode === "edit" && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    className="hover:text-destructive text-muted-foreground"
-                    onClick={async () => {
-                      const ok = await removeBlock(
-                        composer.block,
-                        composer.day,
-                      );
-                      if (ok) setComposer(null);
-                    }}
-                  >
-                    <Trash2 data-icon="inline-start" />
-                    {composer.block.weekdays.length > 1
-                      ? `Remove from ${dayName(composer.day)}`
-                      : "Delete"}
-                  </Button>
-                )
-              }
-            />
-          </DialogContent>
-        )}
-      </Dialog>
-
       <section className="space-y-3">
         <div className="border-border flex items-end justify-between gap-3 border-b pb-2">
           <div>
@@ -499,6 +390,137 @@ export function DayStructureView({
           </div>
         </CollapseBody>
       </section>
+
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-muted-foreground text-xs tracking-wide uppercase">
+            <CollapseToggle
+              open={weekOpen}
+              controls="day-structure-week"
+              onToggle={() => setOpen(["week"], !weekOpen)}
+            >
+              Week
+            </CollapseToggle>
+          </h2>
+          {week.connected && (
+            <p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+              {week.failed ? (
+                "Couldn't load Google Calendar events."
+              ) : (
+                <>
+                  <span
+                    className="border-azure bg-card size-3 rounded-[3px] border border-l-[3px]"
+                    aria-hidden
+                  />
+                  Google Calendar · this week
+                </>
+              )}
+            </p>
+          )}
+        </div>
+        <CollapseBody id="day-structure-week" open={weekOpen}>
+          <WeekGrid
+            blocks={blocks}
+            events={week.events}
+            dates={week.dates}
+            selected={day}
+            today={today}
+            pending={composing}
+            onSelectDay={selectDay}
+            onPickBlock={(value, block) => {
+              selectDay(value);
+              setComposer({ mode: "edit", block, day: value });
+            }}
+            onCreate={(range) => {
+              selectDay(range.day);
+              setComposer({ mode: "new", range });
+            }}
+          />
+        </CollapseBody>
+      </section>
+
+      <section className="space-y-3">
+        <h2 className="text-muted-foreground text-xs tracking-wide uppercase">
+          <CollapseToggle
+            open={timeOpen}
+            controls="day-structure-time"
+            onToggle={() => setOpen(["time"], !timeOpen)}
+          >
+            Time calculation
+          </CollapseToggle>
+        </h2>
+        <CollapseBody id="day-structure-time" open={timeOpen}>
+          <TimeCalculation
+            blocks={blocks}
+            events={week.events}
+            dates={week.dates}
+            today={today}
+          />
+        </CollapseBody>
+      </section>
+
+      <Dialog
+        open={composer !== null}
+        onOpenChange={(open) => !open && setComposer(null)}
+      >
+        {composer && (
+          <DialogContent className="sm:max-w-xl">
+            <DialogHeader>
+              <DialogTitle>
+                {composer.mode === "new" ? "New block" : "Edit block"}
+              </DialogTitle>
+            </DialogHeader>
+            <BlockForm
+              activities={activities}
+              alsoDuring={alsoDuring}
+              initial={
+                composer.mode === "new"
+                  ? {
+                      weekdays: [composer.range.day],
+                      start: fromMinutes(composer.range.from),
+                      end: fromMinutes(composer.range.to),
+                      activityId: null,
+                    }
+                  : draftOf(composer.block)
+              }
+              current={composer.mode === "edit" ? composer.block : undefined}
+              submitLabel={composer.mode === "new" ? "Add block" : "Save"}
+              saving={saving}
+              autoFocus
+              onSubmit={async (draft) => {
+                const ok =
+                  composer.mode === "new"
+                    ? await createBlock(draft)
+                    : await updateBlock(composer.block.id, draft);
+                if (ok) setComposer(null);
+                return ok;
+              }}
+              extra={
+                composer.mode === "edit" && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="hover:text-destructive text-muted-foreground"
+                    onClick={async () => {
+                      const ok = await removeBlock(
+                        composer.block,
+                        composer.day,
+                      );
+                      if (ok) setComposer(null);
+                    }}
+                  >
+                    <Trash2 data-icon="inline-start" />
+                    {composer.block.weekdays.length > 1
+                      ? `Remove from ${dayName(composer.day)}`
+                      : "Delete"}
+                  </Button>
+                )
+              }
+            />
+          </DialogContent>
+        )}
+      </Dialog>
     </div>
   );
 }
