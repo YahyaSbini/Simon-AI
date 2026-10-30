@@ -36,6 +36,7 @@ export default async function BudgetPage({
         today={today}
         categories={data.categories}
         initialItems={data.budget}
+        initialDefaults={data.defaults}
         initialEntries={data.entries}
       />
     </div>

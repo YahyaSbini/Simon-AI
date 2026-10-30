@@ -3,14 +3,19 @@
 import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
+import {
+  CollapseBody,
+  CollapseToggle,
+  useClosedSections,
+} from "@/components/collapsible";
 import { Meter, Segmented, sendJson } from "@/components/finance/finance-bits";
 import { selectClass } from "@/components/task-detail";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { type BudgetLine, budgetLines } from "@/lib/budget";
 import {
   addMonths,
-  dueDateIn,
   formatMoney,
   formatMonth,
   formatShortDate,
@@ -30,32 +35,70 @@ type Draft = {
   amount: string;
   categoryId: string;
   dueDay: string;
+  notes: string;
+  repeats: boolean;
 };
+
+/** Where a change goes: one month, or the default list. */
+type Scope = "month" | "default";
 
 const typeOptions: { value: ItemType; label: string }[] = [
   { value: "bill", label: "Bill" },
   { value: "limit", label: "Limit" },
 ];
 
-type Saved = { item: BudgetItemRow; posted: EntryItem[] };
+const emptyDraft: Draft = {
+  type: "bill",
+  name: "",
+  amount: "",
+  categoryId: "",
+  dueDay: "1",
+  notes: "",
+  repeats: false,
+};
+
+type Snapshot = {
+  budget: BudgetItemRow[];
+  defaults: BudgetItemRow[];
+  entries: EntryItem[];
+};
+
+function draftOf(item: BudgetItemRow): Draft {
+  return {
+    type: item.dueDay ? "bill" : "limit",
+    name: item.name,
+    amount: toAmountInput(item.amountCents),
+    categoryId: item.categoryId ?? "",
+    dueDay: item.dueDay ? String(item.dueDay) : "",
+    notes: item.notes ?? "",
+    repeats: item.repeats,
+  };
+}
 
 export function BudgetView({
   month,
   today,
   categories,
   initialItems,
+  initialDefaults,
   initialEntries,
 }: {
   month: string;
   today: string;
   categories: CategoryItem[];
   initialItems: BudgetItemRow[];
+  initialDefaults: BudgetItemRow[];
   initialEntries: EntryItem[];
 }) {
   const [items, setItems] = useState(initialItems);
+  const [defaults, setDefaults] = useState(initialDefaults);
   const [entries, setEntries] = useState(initialEntries);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const { closed, setOpen } = useClosedSections("finance-budget-closed");
+  const defaultsOpen = !closed.has("defaults");
+  const current = monthOf(today);
+  const next = addMonths(current, 1);
   const expenseCategories = categories.filter(
     (item) => item.kind === "expense",
   );
@@ -97,70 +140,84 @@ export function BudgetView({
       amountCents,
       categoryId: draft.categoryId || null,
       dueDay: draft.type === "bill" ? dueDay : null,
+      notes: draft.notes.trim() || null,
     };
   }
 
-  function mergePosted(posted: EntryItem[]) {
-    const mine = posted.filter((entry) => monthOf(entry.date) === month);
-    if (!mine.length) return;
-    setEntries((current) => [
-      ...current.filter((entry) => !mine.some((item) => item.id === entry.id)),
-      ...mine,
-    ]);
+  function apply(snapshot: Snapshot) {
+    const known = new Set(entries.map((entry) => entry.id));
+    const posted = snapshot.entries.filter(
+      (entry) => entry.budgetItemId && !known.has(entry.id),
+    );
+    setItems(snapshot.budget);
+    setDefaults(snapshot.defaults);
+    setEntries(snapshot.entries);
+    for (const entry of posted) {
+      toast.success(
+        `${entry.note ?? "Bill"} posted as an expense on ${formatShortDate(entry.date)}.`,
+      );
+    }
   }
 
-  async function createItem(draft: Draft) {
+  async function createItem(draft: Draft, scope: Scope) {
     const payload = toPayload(draft);
     if (!payload) return false;
     setSaving(true);
-    const result = await sendJson<Saved>(
+    const result = await sendJson<Snapshot>(
       "/api/finance/budget-items",
       "POST",
-      payload,
+      {
+        ...payload,
+        view: month,
+        ...(scope === "month" ? { month, repeats: draft.repeats } : {}),
+      },
     );
     setSaving(false);
     if (!result) {
       toast.error("Couldn't add that budget item.");
       return false;
     }
-    setItems((current) => [...current, result.item]);
-    mergePosted(result.posted);
-    if (result.posted.length) {
-      toast.success(`${result.item.name} posted as today's expense.`);
-    }
+    apply(result);
     return true;
   }
 
-  async function updateItem(item: BudgetItemRow, draft: Draft) {
+  async function updateItem(item: BudgetItemRow, draft: Draft, scope: Scope) {
     const payload = toPayload(draft);
     if (!payload) return false;
-    const result = await sendJson<Saved>(
+    const result = await sendJson<Snapshot>(
       `/api/finance/budget-items/${item.id}`,
       "PATCH",
-      payload,
+      {
+        ...payload,
+        view: month,
+        ...(scope === "month" ? { month, repeats: draft.repeats } : {}),
+      },
     );
     if (!result) {
       toast.error("Couldn't save that budget item.");
       return false;
     }
-    setItems((current) =>
-      current.map((row) => (row.id === item.id ? result.item : row)),
-    );
-    mergePosted(result.posted);
-    setEditingId(null);
+    apply(result);
+    setEditing(null);
     return true;
   }
 
-  async function removeItem(item: BudgetItemRow) {
-    const previous = items;
-    setItems((current) => current.filter((row) => row.id !== item.id));
-    const result = await sendJson(
-      `/api/finance/budget-items/${item.id}`,
+  async function removeItem(item: BudgetItemRow, scope: Scope) {
+    const query = new URLSearchParams({ view: month });
+    if (scope === "month") query.set("month", month);
+    const result = await sendJson<Snapshot>(
+      `/api/finance/budget-items/${item.id}?${query}`,
       "DELETE",
     );
     if (!result) {
       toast.error("Couldn't remove that budget item.");
-      setItems(previous);
+      return;
+    }
+    apply(result);
+    if (scope === "default" && monthOf(item.startDate) <= current) {
+      toast.success(
+        `${item.name} stops from ${formatMonth(next)}. ${formatMonth(current)} and earlier keep it.`,
+      );
     }
   }
 
@@ -170,51 +227,130 @@ export function BudgetView({
       return `${money(line.spentCents)} of ${money(item.amountCents)}`;
     }
     if (line.paid) return `Paid ${money(line.spentCents)}`;
-    if (!line.dueDate) {
-      return `Starts ${formatShortDate(dueDateIn(addMonths(month, 1), item.dueDay))}`;
+    if (line.dueDate && line.dueDate >= today) {
+      return `Due ${formatShortDate(line.dueDate)}`;
     }
-    if (line.dueDate >= today) return `Due ${formatShortDate(line.dueDate)}`;
     return "Not posted";
+  }
+
+  function details(item: BudgetItemRow, extra: (string | null)[] = []) {
+    return [
+      item.categoryId ? categoryName.get(item.categoryId) : null,
+      item.dueDay ? `Posts on the ${ordinal(item.dueDay)}` : null,
+      ...extra,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+  }
+
+  function actions(item: BudgetItemRow, key: string, scope: Scope) {
+    return (
+      <span className="flex shrink-0 items-center opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 max-md:opacity-100">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Edit ${item.name}`}
+          onClick={() => setEditing(key)}
+        >
+          <Pencil />
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="hover:text-destructive"
+          aria-label={`Remove ${item.name}`}
+          onClick={() => removeItem(item, scope)}
+        >
+          <Trash2 />
+        </Button>
+      </span>
+    );
+  }
+
+  function title(item: BudgetItemRow, detail: string) {
+    return (
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium">{item.name}</p>
+        {detail ? (
+          <p className="text-muted-foreground truncate text-sm">{detail}</p>
+        ) : null}
+        {item.notes ? (
+          <p className="text-muted-foreground text-sm break-words whitespace-pre-line">
+            {item.notes}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderDefault(item: BudgetItemRow) {
+    const key = `default:${item.id}`;
+    const first = monthOf(item.startDate);
+    if (editing === key) {
+      return (
+        <li key={item.id} className="py-1">
+          <ItemForm
+            initial={draftOf(item)}
+            categories={expenseCategories}
+            hint={() =>
+              first > current
+                ? null
+                : `Applies from ${formatMonth(next)}. ${formatMonth(current)} and earlier stay as they are.`
+            }
+            onSubmit={(draft) => updateItem(item, draft, "default")}
+            onCancel={() => setEditing(null)}
+          />
+        </li>
+      );
+    }
+    const detail = details(item, [
+      first > current ? `From ${formatMonth(first)}` : null,
+      item.endMonth ? `Until ${formatMonth(item.endMonth)}` : null,
+    ]);
+    return (
+      <li key={item.id} className="group/row flex items-center gap-3 py-3">
+        {title(item, detail)}
+        <p className="text-muted-foreground shrink-0 text-sm tabular-nums">
+          {money(item.amountCents)}
+        </p>
+        {actions(item, key, "default")}
+      </li>
+    );
   }
 
   function renderLine(line: BudgetLine) {
     const { item } = line;
-    if (editingId === item.id) {
+    const key = `month:${item.id}`;
+    if (editing === key) {
       return (
         <li key={item.id} className="py-1">
           <ItemForm
-            initial={{
-              type: item.dueDay ? "bill" : "limit",
-              name: item.name,
-              amount: toAmountInput(item.amountCents),
-              categoryId: item.categoryId ?? "",
-              dueDay: item.dueDay ? String(item.dueDay) : "",
-            }}
+            initial={draftOf(item)}
             categories={expenseCategories}
-            onSubmit={(draft) => updateItem(item, draft)}
-            onCancel={() => setEditingId(null)}
+            showRepeat
+            hint={(draft) =>
+              !item.repeats
+                ? null
+                : draft.repeats
+                  ? `Changes apply to ${formatMonth(month)} only.`
+                  : `Stops repeating after ${formatMonth(month)}.`
+            }
+            onSubmit={(draft) => updateItem(item, draft, "month")}
+            onCancel={() => setEditing(null)}
           />
         </li>
       );
     }
 
     const over = !item.dueDay && line.spentCents > item.amountCents;
-    const detail = [
-      item.categoryId ? categoryName.get(item.categoryId) : null,
-      item.dueDay ? `Posts on the ${ordinal(item.dueDay)}` : null,
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    const detail = details(item, [item.repeats ? "Repeats monthly" : null]);
 
     return (
       <li key={item.id} className="group/row space-y-2 py-3">
         <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{item.name}</p>
-            {detail ? (
-              <p className="text-muted-foreground truncate text-sm">{detail}</p>
-            ) : null}
-          </div>
+          {title(item, detail)}
           <div className="shrink-0 text-right text-sm tabular-nums">
             <p className={cn(over && "text-destructive")}>{status(line)}</p>
             {item.dueDay ? (
@@ -229,27 +365,7 @@ export function BudgetView({
               </p>
             )}
           </div>
-          <span className="flex shrink-0 items-center opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 max-md:opacity-100">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              aria-label={`Edit ${item.name}`}
-              onClick={() => setEditingId(item.id)}
-            >
-              <Pencil />
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-sm"
-              className="hover:text-destructive"
-              aria-label={`Remove ${item.name}`}
-              onClick={() => removeItem(item)}
-            >
-              <Trash2 />
-            </Button>
-          </span>
+          {actions(item, key, "month")}
         </div>
         {!item.dueDay ? (
           <Meter
@@ -264,6 +380,39 @@ export function BudgetView({
 
   return (
     <div className="space-y-8">
+      <section>
+        <h2 className="border-border border-b pb-2">
+          <CollapseToggle
+            open={defaultsOpen}
+            controls="budget-defaults"
+            count={defaults.length}
+            onToggle={() => setOpen(["defaults"], !defaultsOpen)}
+            className="text-muted-foreground text-xs tracking-wide uppercase"
+          >
+            <span className="truncate">Default items</span>
+          </CollapseToggle>
+        </h2>
+        <CollapseBody id="budget-defaults" open={defaultsOpen}>
+          {defaults.length ? (
+            <ul className="divide-border divide-y">
+              {defaults.map(renderDefault)}
+            </ul>
+          ) : (
+            <p className="text-muted-foreground py-3 text-sm">
+              Added to every month. Edits apply from next month on.
+            </p>
+          )}
+          <div className="pt-2 pb-1">
+            <ItemForm
+              initial={emptyDraft}
+              categories={expenseCategories}
+              saving={saving}
+              onSubmit={(draft) => createItem(draft, "default")}
+            />
+          </div>
+        </CollapseBody>
+      </section>
+
       <section className="space-y-2">
         <p className="text-sm">
           <span className="font-heading text-2xl tabular-nums">
@@ -291,22 +440,12 @@ export function BudgetView({
       </BudgetGroup>
 
       <ItemForm
-        initial={{
-          type: "bill",
-          name: "",
-          amount: "",
-          categoryId: "",
-          dueDay: "1",
-        }}
+        initial={emptyDraft}
         categories={expenseCategories}
         saving={saving}
-        onSubmit={createItem}
+        showRepeat
+        onSubmit={(draft) => createItem(draft, "month")}
       />
-      {month !== monthOf(today) ? (
-        <p className="text-muted-foreground text-sm">
-          New items start from today, not from {formatMonth(month)}.
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -338,12 +477,16 @@ function ItemForm({
   initial,
   categories,
   saving = false,
+  showRepeat = false,
+  hint,
   onSubmit,
   onCancel,
 }: {
   initial: Draft;
   categories: CategoryItem[];
   saving?: boolean;
+  showRepeat?: boolean;
+  hint?: (draft: Draft) => string | null;
   onSubmit: (draft: Draft) => Promise<boolean>;
   onCancel?: () => void;
 }) {
@@ -353,7 +496,7 @@ function ItemForm({
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const ok = await onSubmit(draft);
-    if (ok && !editing) setDraft({ ...draft, name: "", amount: "" });
+    if (ok && !editing) setDraft({ ...draft, name: "", amount: "", notes: "" });
   }
 
   return (
@@ -420,6 +563,25 @@ function ItemForm({
           />
         </label>
       ) : null}
+      {showRepeat ? (
+        <label className="text-muted-foreground flex min-h-9 cursor-pointer items-center gap-2 px-1 text-sm select-none">
+          <Checkbox
+            checked={draft.repeats}
+            onCheckedChange={(checked) =>
+              setDraft({ ...draft, repeats: checked })
+            }
+          />
+          Repeat monthly
+        </label>
+      ) : null}
+      <Input
+        value={draft.notes}
+        onChange={(event) => setDraft({ ...draft, notes: event.target.value })}
+        placeholder="Notes"
+        aria-label="Notes"
+        maxLength={500}
+        className="min-w-48 flex-1 basis-64"
+      />
       <div className="flex items-center gap-1">
         {onCancel ? (
           <Button
@@ -448,6 +610,11 @@ function ItemForm({
           )}
         </Button>
       </div>
+      {hint?.(draft) ? (
+        <p className="text-muted-foreground basis-full px-1 text-sm">
+          {hint(draft)}
+        </p>
+      ) : null}
     </form>
   );
 }

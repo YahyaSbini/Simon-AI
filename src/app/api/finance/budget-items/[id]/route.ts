@@ -1,25 +1,102 @@
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, isNull, or } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { db } from "@/db";
-import { budgetItem, financeEntry } from "@/db/schema";
+import { type BudgetItem, budgetItem, budgetItemMonth } from "@/db/schema";
 import {
+  appliesIn,
+  getBudgetSnapshot,
   ownsCategory,
-  postDueBills,
-  serializeBudgetItem,
-  serializeEntry,
+  postMonthIfDue,
+  valuesIn,
+  valuesOf,
 } from "@/lib/finance";
+import { addMonths, monthOf } from "@/lib/money";
 import { requireUserId } from "@/lib/session";
 import { getTimeZone, todayIn } from "@/lib/timezone";
-import { budgetItemInput } from "@/lib/validation";
+import { budgetItemInput, monthKey } from "@/lib/validation";
 
-const updateSchema = budgetItemInput.partial();
+/** With `month` the change is for that month only; without it, for the default from next month on. */
+const updateSchema = budgetItemInput.extend({
+  month: monthKey.optional(),
+  repeats: z.boolean().optional(),
+  view: monthKey,
+});
+
+const deleteSchema = z.object({
+  month: monthKey.optional(),
+  view: monthKey,
+});
 
 type RouteContext = { params: Promise<{ id: string }> };
 
-function dayBefore(date: string): string {
-  const value = new Date(`${date}T00:00:00Z`);
-  value.setUTCDate(value.getUTCDate() - 1);
-  return value.toISOString().slice(0, 10);
+async function findItem(userId: string, id: string) {
+  const [row] = await db
+    .select()
+    .from(budgetItem)
+    .where(and(eq(budgetItem.id, id), eq(budgetItem.userId, userId)));
+  return row;
+}
+
+async function findOverride(itemId: string, month: string) {
+  const [row] = await db
+    .select()
+    .from(budgetItemMonth)
+    .where(
+      and(
+        eq(budgetItemMonth.budgetItemId, itemId),
+        eq(budgetItemMonth.month, month),
+      ),
+    );
+  return row;
+}
+
+/** Saves `values` as the item's own copy for `month`. */
+async function saveMonth(
+  item: BudgetItem,
+  month: string,
+  values: ReturnType<typeof valuesOf>,
+  removed = false,
+) {
+  await db
+    .insert(budgetItemMonth)
+    .values({
+      ...values,
+      userId: item.userId,
+      budgetItemId: item.id,
+      month,
+      removed,
+    })
+    .onConflictDoUpdate({
+      target: [budgetItemMonth.budgetItemId, budgetItemMonth.month],
+      set: { ...values, removed, updatedAt: new Date() },
+    });
+}
+
+/** Copies the item's current values into every month up to `through` that has no copy yet. */
+async function freezeThrough(item: BudgetItem, through: string) {
+  const last =
+    item.endMonth && item.endMonth < through ? item.endMonth : through;
+  const months: string[] = [];
+  for (
+    let month = monthOf(item.startDate);
+    month <= last;
+    month = addMonths(month, 1)
+  ) {
+    months.push(month);
+  }
+  if (!months.length) return;
+  await db
+    .insert(budgetItemMonth)
+    .values(
+      months.map((month) => ({
+        ...valuesOf(item),
+        userId: item.userId,
+        budgetItemId: item.id,
+        month,
+      })),
+    )
+    .onConflictDoNothing();
 }
 
 export async function PATCH(request: Request, { params }: RouteContext) {
@@ -42,67 +119,142 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   }
 
   const { id } = await params;
-  const [current] = await db
-    .select()
-    .from(budgetItem)
-    .where(and(eq(budgetItem.id, id), eq(budgetItem.userId, userId)));
+  const item = await findItem(userId, id);
 
-  if (!current) {
+  if (!item) {
     return NextResponse.json({ error: "Item not found." }, { status: 404 });
   }
 
+  const { month, repeats, view, ...fields } = parsed.data;
+  const values = {
+    name: fields.name,
+    amountCents: fields.amountCents,
+    categoryId: fields.categoryId ?? null,
+    dueDay: fields.dueDay ?? null,
+    notes: fields.notes || null,
+  };
   const today = todayIn(await getTimeZone());
-  const rescheduled =
-    parsed.data.dueDay !== undefined && parsed.data.dueDay !== current.dueDay;
-  const resumeFrom = dayBefore(today);
-  const [updated] = await db
-    .update(budgetItem)
-    .set({
-      ...parsed.data,
-      ...(rescheduled &&
-      (!current.postedThrough || current.postedThrough < resumeFrom)
-        ? { postedThrough: resumeFrom }
-        : {}),
-      updatedAt: new Date(),
-    })
-    .where(eq(budgetItem.id, id))
-    .returning();
+  const current = monthOf(today);
+  const updatedAt = new Date();
 
-  if (rescheduled) await postDueBills(userId, today);
-  const posted = rescheduled
-    ? await db
-        .select()
-        .from(financeEntry)
+  if (!month) {
+    // The default changes from next month on; this month and earlier keep what they had.
+    if (!item.repeats) {
+      return NextResponse.json(
+        { error: "Only repeating items are defaults." },
+        { status: 400 },
+      );
+    }
+    await freezeThrough(item, current);
+    await db
+      .update(budgetItem)
+      .set({ ...values, updatedAt })
+      .where(eq(budgetItem.id, id));
+    return NextResponse.json(await getBudgetSnapshot(userId, view, today));
+  }
+
+  if (!appliesIn(item, month)) {
+    return NextResponse.json(
+      { error: "That item isn't in this month." },
+      { status: 400 },
+    );
+  }
+
+  const before = valuesIn(item, await findOverride(id, month));
+  const first = monthOf(item.startDate);
+
+  if (!item.repeats) {
+    await db
+      .update(budgetItem)
+      .set({
+        ...values,
+        ...(repeats ? { repeats: true, endMonth: null } : {}),
+        updatedAt,
+      })
+      .where(eq(budgetItem.id, id));
+  } else if (repeats === false && month === first) {
+    await db
+      .update(budgetItem)
+      .set({ ...values, repeats: false, endMonth: null, updatedAt })
+      .where(eq(budgetItem.id, id));
+    await db
+      .delete(budgetItemMonth)
+      .where(eq(budgetItemMonth.budgetItemId, id));
+  } else {
+    await saveMonth(item, month, values);
+    if (repeats === false) {
+      await db
+        .update(budgetItem)
+        .set({ endMonth: month, updatedAt })
+        .where(eq(budgetItem.id, id));
+      await db
+        .delete(budgetItemMonth)
         .where(
           and(
-            eq(financeEntry.budgetItemId, id),
-            gt(financeEntry.date, resumeFrom),
+            eq(budgetItemMonth.budgetItemId, id),
+            gt(budgetItemMonth.month, month),
           ),
-        )
-    : [];
+        );
+    }
+  }
 
-  return NextResponse.json({
-    item: serializeBudgetItem(updated),
-    posted: posted.map(serializeEntry),
-  });
+  if (before?.dueDay !== values.dueDay && month <= current) {
+    await postMonthIfDue(userId, id, month, today);
+  }
+
+  return NextResponse.json(await getBudgetSnapshot(userId, view, today));
 }
 
-export async function DELETE(_request: Request, { params }: RouteContext) {
+export async function DELETE(request: Request, { params }: RouteContext) {
   const userId = await requireUserId();
 
   if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { id } = await params;
-  const [deleted] = await db
-    .delete(budgetItem)
-    .where(and(eq(budgetItem.id, id), eq(budgetItem.userId, userId)))
-    .returning({ id: budgetItem.id });
+  const search = new URL(request.url).searchParams;
+  const parsed = deleteSchema.safeParse({
+    month: search.get("month") ?? undefined,
+    view: search.get("view"),
+  });
 
-  if (!deleted) {
+  if (!parsed.success) {
+    return NextResponse.json({ error: "Invalid month." }, { status: 400 });
+  }
+
+  const { id } = await params;
+  const item = await findItem(userId, id);
+
+  if (!item) {
     return NextResponse.json({ error: "Item not found." }, { status: 404 });
   }
 
-  return NextResponse.json({ ok: true });
+  const { month, view } = parsed.data;
+  const today = todayIn(await getTimeZone());
+  const current = monthOf(today);
+  const first = monthOf(item.startDate);
+
+  if (month) {
+    if (!item.repeats) {
+      await db.delete(budgetItem).where(eq(budgetItem.id, id));
+    } else {
+      const values = valuesIn(item, await findOverride(id, month));
+      await saveMonth(item, month, values ?? valuesOf(item), true);
+    }
+  } else if (first > current) {
+    await db.delete(budgetItem).where(eq(budgetItem.id, id));
+  } else {
+    // Stops after this month; this month and earlier keep the item.
+    await db
+      .update(budgetItem)
+      .set({ endMonth: current, updatedAt: new Date() })
+      .where(
+        and(
+          eq(budgetItem.id, id),
+          or(isNull(budgetItem.endMonth), gt(budgetItem.endMonth, current)),
+        ),
+      );
+  }
+
+  return NextResponse.json(await getBudgetSnapshot(userId, view, today));
 }
