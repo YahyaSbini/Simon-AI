@@ -63,7 +63,7 @@ export function FinanceOverview({
   const [entries, setEntries] = useState(initialEntries);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const totals = monthTotals(budget, entries, month);
+  const totals = monthTotals(budget, entries);
   const left = totals.incomeCents - totals.spentCents;
   const hasExpected =
     totals.expectedIncomeCents > 0 || totals.expectedSpendCents > 0;

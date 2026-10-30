@@ -1,16 +1,38 @@
-import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { db } from "@/db";
-import { budgetItem, financeEntry } from "@/db/schema";
-import {
-  ownsCategory,
-  postDueBills,
-  serializeBudgetItem,
-  serializeEntry,
-} from "@/lib/finance";
+import { budgetItem } from "@/db/schema";
+import { getBudgetSnapshot, ownsCategory } from "@/lib/finance";
+import { monthOf } from "@/lib/money";
 import { requireUserId } from "@/lib/session";
 import { getTimeZone, todayIn } from "@/lib/timezone";
-import { budgetItemInput } from "@/lib/validation";
+import { budgetItemInput, monthKey } from "@/lib/validation";
+
+/** Without `month` the item is a default: it repeats from the current month on. */
+const createSchema = budgetItemInput.extend({
+  month: monthKey.optional(),
+  repeats: z.boolean().optional(),
+  view: monthKey,
+});
+
+export async function GET(request: Request) {
+  const userId = await requireUserId();
+
+  if (!userId) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const view = monthKey.safeParse(
+    new URL(request.url).searchParams.get("view"),
+  );
+
+  if (!view.success) {
+    return NextResponse.json({ error: "Invalid month." }, { status: 400 });
+  }
+
+  const today = todayIn(await getTimeZone());
+  return NextResponse.json(await getBudgetSnapshot(userId, view.data, today));
+}
 
 export async function POST(request: Request) {
   const userId = await requireUserId();
@@ -19,7 +41,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const parsed = budgetItemInput.safeParse(await request.json());
+  const parsed = createSchema.safeParse(await request.json());
 
   if (
     !parsed.success ||
@@ -31,25 +53,17 @@ export async function POST(request: Request) {
     );
   }
 
+  const { month, repeats, view, ...values } = parsed.data;
   const today = todayIn(await getTimeZone());
-  const [created] = await db
-    .insert(budgetItem)
-    .values({ ...parsed.data, userId, startDate: today })
-    .returning();
+  await db.insert(budgetItem).values({
+    ...values,
+    notes: values.notes || null,
+    userId,
+    startDate: `${month ?? monthOf(today)}-01`,
+    repeats: month ? (repeats ?? false) : true,
+  });
 
-  await postDueBills(userId, today);
-  const posted = await db
-    .select()
-    .from(financeEntry)
-    .where(
-      and(
-        eq(financeEntry.userId, userId),
-        eq(financeEntry.budgetItemId, created.id),
-      ),
-    );
-
-  return NextResponse.json(
-    { item: serializeBudgetItem(created), posted: posted.map(serializeEntry) },
-    { status: 201 },
-  );
+  return NextResponse.json(await getBudgetSnapshot(userId, view, today), {
+    status: 201,
+  });
 }

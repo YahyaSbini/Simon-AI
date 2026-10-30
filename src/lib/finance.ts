@@ -1,13 +1,15 @@
-import { and, asc, desc, eq, gte, isNotNull, isNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, isNull, lte, or } from "drizzle-orm";
 import { db } from "@/db";
 import type {
   BudgetItem,
+  BudgetItemMonth,
   FinanceCategory,
   FinanceEntry,
   SavingsGoal,
 } from "@/db/schema";
 import {
   budgetItem,
+  budgetItemMonth,
   financeCategory,
   financeEntry,
   financeSettings,
@@ -57,7 +59,10 @@ export function serializeBudgetItem(row: BudgetItem): BudgetItemRow {
     categoryId: row.categoryId,
     amountCents: row.amountCents,
     dueDay: row.dueDay,
+    notes: row.notes,
     startDate: row.startDate,
+    repeats: row.repeats,
+    endMonth: row.endMonth,
   };
 }
 
@@ -90,37 +95,93 @@ export async function ensureFinanceSetup(userId: string): Promise<void> {
   }
 }
 
-/** Due dates of a bill after `after` (exclusive) up to `through` (inclusive). */
-export function dueDatesBetween(
-  item: Pick<BudgetItem, "dueDay" | "startDate">,
+type BudgetValues = Pick<
+  BudgetItem,
+  "name" | "amountCents" | "categoryId" | "dueDay" | "notes"
+>;
+
+export function monthKey(itemId: string, month: string) {
+  return `${itemId}:${month}`;
+}
+
+/** Whether a budget item belongs to `month`, before any per-month change. */
+export function appliesIn(
+  item: Pick<BudgetItem, "startDate" | "repeats" | "endMonth">,
+  month: string,
+): boolean {
+  const first = monthOf(item.startDate);
+  if (!item.repeats) return month === first;
+  return month >= first && (!item.endMonth || month <= item.endMonth);
+}
+
+export function valuesOf(row: BudgetValues): BudgetValues {
+  return {
+    name: row.name,
+    amountCents: row.amountCents,
+    categoryId: row.categoryId,
+    dueDay: row.dueDay,
+    notes: row.notes,
+  };
+}
+
+/** The item's values in `month`: its month copy when there is one, null when taken out. */
+export function valuesIn(
+  item: BudgetItem,
+  override: BudgetItemMonth | undefined,
+): BudgetValues | null {
+  if (!override) return valuesOf(item);
+  return override.removed ? null : valuesOf(override);
+}
+
+/** Bills of an item that fall due after `after` (exclusive) up to `through` (inclusive). */
+export function dueBillsBetween(
+  item: BudgetItem,
+  overrides: Map<string, BudgetItemMonth>,
   after: string | null,
   through: string,
-): string[] {
-  if (!item.dueDay) return [];
+): (BudgetValues & { date: string })[] {
   const from = after && after > item.startDate ? after : item.startDate;
-  const dates: string[] = [];
+  const bills: (BudgetValues & { date: string })[] = [];
   const last = monthOf(through);
 
   for (let month = monthOf(from); month <= last; month = addMonths(month, 1)) {
-    const due = dueDateIn(month, item.dueDay);
+    if (!appliesIn(item, month)) continue;
+    const values = valuesIn(item, overrides.get(monthKey(item.id, month)));
+    if (!values?.dueDay) continue;
+    const due = dueDateIn(month, values.dueDay);
     if (due >= item.startDate && due <= through && (!after || due > after)) {
-      dates.push(due);
+      bills.push({ ...values, date: due });
     }
   }
 
-  return dates;
+  return bills;
+}
+
+async function getOverrides(userId: string, through: string) {
+  const rows = await db
+    .select()
+    .from(budgetItemMonth)
+    .where(
+      and(
+        eq(budgetItemMonth.userId, userId),
+        lte(budgetItemMonth.month, through),
+      ),
+    );
+  return new Map(
+    rows.map((row) => [monthKey(row.budgetItemId, row.month), row]),
+  );
 }
 
 /** Posts every bill that has come due since it last ran, at most once per month. */
 export async function postDueBills(userId: string, today: string) {
-  const bills = await db
-    .select()
-    .from(budgetItem)
-    .where(and(eq(budgetItem.userId, userId), isNotNull(budgetItem.dueDay)));
+  const [items, overrides] = await Promise.all([
+    db.select().from(budgetItem).where(eq(budgetItem.userId, userId)),
+    getOverrides(userId, monthOf(today)),
+  ]);
 
-  for (const bill of bills) {
-    if (bill.postedThrough && bill.postedThrough >= today) continue;
-    const dates = dueDatesBetween(bill, bill.postedThrough, today);
+  for (const item of items) {
+    if (item.postedThrough && item.postedThrough >= today) continue;
+    const bills = dueBillsBetween(item, overrides, item.postedThrough, today);
 
     await db.transaction(async (tx) => {
       const [claimed] = await tx
@@ -128,43 +189,96 @@ export async function postDueBills(userId: string, today: string) {
         .set({ postedThrough: today })
         .where(
           and(
-            eq(budgetItem.id, bill.id),
-            bill.postedThrough
-              ? eq(budgetItem.postedThrough, bill.postedThrough)
+            eq(budgetItem.id, item.id),
+            item.postedThrough
+              ? eq(budgetItem.postedThrough, item.postedThrough)
               : isNull(budgetItem.postedThrough),
           ),
         )
         .returning({ id: budgetItem.id });
 
-      if (!claimed || !dates.length) return;
+      if (!claimed || !bills.length) return;
 
       const existing = await tx
         .select({ date: financeEntry.date })
         .from(financeEntry)
         .where(
           and(
-            eq(financeEntry.budgetItemId, bill.id),
-            gte(financeEntry.date, monthBounds(monthOf(dates[0])).start),
+            eq(financeEntry.budgetItemId, item.id),
+            gte(financeEntry.date, monthBounds(monthOf(bills[0].date)).start),
           ),
         );
       const postedMonths = new Set(existing.map((row) => monthOf(row.date)));
-      const pending = dates.filter((date) => !postedMonths.has(monthOf(date)));
+      const pending = bills.filter(
+        (bill) => !postedMonths.has(monthOf(bill.date)),
+      );
 
       if (pending.length) {
         await tx.insert(financeEntry).values(
-          pending.map((date) => ({
+          pending.map((bill) => ({
             userId,
             kind: "expense" as const,
             amountCents: bill.amountCents,
             categoryId: bill.categoryId,
-            budgetItemId: bill.id,
-            date,
+            budgetItemId: item.id,
+            date: bill.date,
             note: bill.name,
           })),
         );
       }
     });
   }
+}
+
+/**
+ * Posts `month`'s bill for an item right away when its day has already passed and
+ * nothing is posted for that month yet. Used after a month's due day is changed.
+ */
+export async function postMonthIfDue(
+  userId: string,
+  itemId: string,
+  month: string,
+  today: string,
+) {
+  const [item] = await db
+    .select()
+    .from(budgetItem)
+    .where(and(eq(budgetItem.id, itemId), eq(budgetItem.userId, userId)));
+  if (!item || !appliesIn(item, month)) return;
+  const [override] = await db
+    .select()
+    .from(budgetItemMonth)
+    .where(
+      and(
+        eq(budgetItemMonth.budgetItemId, itemId),
+        eq(budgetItemMonth.month, month),
+      ),
+    );
+  const values = valuesIn(item, override);
+  if (!values?.dueDay) return;
+  const due = dueDateIn(month, values.dueDay);
+  if (due < item.startDate || due > today) return;
+  const { start, end } = monthBounds(month);
+  const [posted] = await db
+    .select({ id: financeEntry.id })
+    .from(financeEntry)
+    .where(
+      and(
+        eq(financeEntry.budgetItemId, itemId),
+        gte(financeEntry.date, start),
+        lte(financeEntry.date, end),
+      ),
+    );
+  if (posted) return;
+  await db.insert(financeEntry).values({
+    userId,
+    kind: "expense",
+    amountCents: values.amountCents,
+    categoryId: values.categoryId,
+    budgetItemId: itemId,
+    date: due,
+    note: values.name,
+  });
 }
 
 export async function getCategories(userId: string): Promise<CategoryItem[]> {
@@ -195,11 +309,50 @@ export async function getMonthEntries(
   return rows.map(serializeEntry);
 }
 
-export async function getBudgetItems(userId: string): Promise<BudgetItemRow[]> {
+/** Budget items of `month`, with that month's own changes applied. */
+export async function getBudgetMonth(
+  userId: string,
+  month: string,
+): Promise<BudgetItemRow[]> {
+  const [items, overrides] = await Promise.all([
+    db
+      .select()
+      .from(budgetItem)
+      .where(eq(budgetItem.userId, userId))
+      .orderBy(asc(budgetItem.createdAt)),
+    db
+      .select()
+      .from(budgetItemMonth)
+      .where(
+        and(
+          eq(budgetItemMonth.userId, userId),
+          eq(budgetItemMonth.month, month),
+        ),
+      ),
+  ]);
+  const byItem = new Map(overrides.map((row) => [row.budgetItemId, row]));
+  return items.flatMap((item) => {
+    if (!appliesIn(item, month)) return [];
+    const values = valuesIn(item, byItem.get(item.id));
+    return values ? [serializeBudgetItem({ ...item, ...values })] : [];
+  });
+}
+
+/** Repeating items that still run after `current`: the default list. */
+export async function getDefaultItems(
+  userId: string,
+  current: string,
+): Promise<BudgetItemRow[]> {
   const rows = await db
     .select()
     .from(budgetItem)
-    .where(eq(budgetItem.userId, userId))
+    .where(
+      and(
+        eq(budgetItem.userId, userId),
+        eq(budgetItem.repeats, true),
+        or(isNull(budgetItem.endMonth), gt(budgetItem.endMonth, current)),
+      ),
+    )
     .orderBy(asc(budgetItem.createdAt));
   return rows.map(serializeBudgetItem);
 }
@@ -223,12 +376,28 @@ export async function getFinanceMonth(
 ) {
   await ensureFinanceSetup(userId);
   await postDueBills(userId, today);
-  const [categories, entries, budget] = await Promise.all([
+  const [categories, entries, budget, defaults] = await Promise.all([
     getCategories(userId),
     getMonthEntries(userId, month),
-    getBudgetItems(userId),
+    getBudgetMonth(userId, month),
+    getDefaultItems(userId, monthOf(today)),
   ]);
-  return { categories, entries, budget };
+  return { categories, entries, budget, defaults };
+}
+
+/** What the budget page shows for `month` after a change: items, defaults and entries. */
+export async function getBudgetSnapshot(
+  userId: string,
+  month: string,
+  today: string,
+) {
+  await postDueBills(userId, today);
+  const [entries, budget, defaults] = await Promise.all([
+    getMonthEntries(userId, month),
+    getBudgetMonth(userId, month),
+    getDefaultItems(userId, monthOf(today)),
+  ]);
+  return { entries, budget, defaults };
 }
 
 export async function ownsCategory(
