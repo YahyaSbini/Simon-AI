@@ -43,7 +43,7 @@ type Draft = {
 };
 
 const kindOptions: { value: Kind; label: string }[] = [
-  { value: "expense", label: "Expense" },
+  { value: "expense", label: "Outcome" },
   { value: "income", label: "Income" },
 ];
 
@@ -73,14 +73,16 @@ export function FinanceOverview({
     [categories],
   );
 
-  const days = useMemo(() => {
-    const groups = new Map<string, EntryItem[]>();
-    for (const entry of [...entries].sort((a, b) =>
-      b.date.localeCompare(a.date),
-    )) {
-      groups.set(entry.date, [...(groups.get(entry.date) ?? []), entry]);
-    }
-    return [...groups.entries()];
+  const columns = useMemo(() => {
+    const sorted = [...entries].sort((a, b) => b.date.localeCompare(a.date));
+    return kindOptions
+      .slice()
+      .reverse()
+      .map((option) => ({
+        kind: option.value,
+        label: option.label,
+        items: sorted.filter((entry) => entry.kind === option.value),
+      }));
   }, [entries]);
 
   function toPayload(draft: Draft) {
@@ -180,7 +182,7 @@ export function FinanceOverview({
       <section className="space-y-4">
         <dl className="border-border bg-card grid grid-cols-3 divide-x divide-border rounded-xl border">
           <Figure label="Income" value={money(totals.incomeCents)} />
-          <Figure label="Spent" value={money(totals.spentCents)} />
+          <Figure label="Outcome" value={money(totals.spentCents)} />
           <Figure
             label="Left"
             value={money(left)}
@@ -248,20 +250,26 @@ export function FinanceOverview({
           onSubmit={createEntry}
         />
 
-        {days.length === 0 ? (
-          <p className="text-muted-foreground border-border rounded-xl border border-dashed px-4 py-8 text-center text-sm">
-            Nothing logged for {formatMonth(month)}. Add an income or expense
-            above.
-          </p>
-        ) : (
-          <div className="space-y-6">
-            {days.map(([date, items]) => (
-              <div key={date}>
-                <h2 className="text-muted-foreground border-border mb-1 border-b pb-2 text-xs tracking-wide uppercase">
-                  {date === today ? "Today" : formatShortDate(date)}
-                </h2>
+        <div className="grid gap-6 md:grid-cols-2">
+          {columns.map((column) => (
+            <div key={column.kind} className="min-w-0">
+              <h2 className="text-muted-foreground mb-1 flex items-baseline justify-between gap-3 text-xs tracking-wide uppercase">
+                {column.label}
+                <span className="tabular-nums">
+                  {money(
+                    column.kind === "income"
+                      ? totals.incomeCents
+                      : totals.spentCents,
+                  )}
+                </span>
+              </h2>
+              {column.items.length === 0 ? (
+                <p className="text-muted-foreground border-border rounded-xl border border-dashed px-4 py-6 text-center text-sm">
+                  No {column.label.toLowerCase()} in {formatMonth(month)}.
+                </p>
+              ) : (
                 <ul>
-                  {items.map((entry) =>
+                  {column.items.map((entry) =>
                     editingId === entry.id ? (
                       <li key={entry.id} className="py-1">
                         <EntryForm
@@ -283,6 +291,11 @@ export function FinanceOverview({
                         key={entry.id}
                         className="group/row flex min-h-11 items-center gap-3 py-1.5"
                       >
+                        <span className="text-muted-foreground w-14 shrink-0 text-sm tabular-nums">
+                          {entry.date === today
+                            ? "Today"
+                            : formatShortDate(entry.date)}
+                        </span>
                         <div
                           className={cn(
                             "min-w-0 flex-1",
@@ -334,14 +347,21 @@ export function FinanceOverview({
                           <Button
                             type="button"
                             variant="outline"
-                            size="sm"
+                            size="icon-sm"
                             className="shrink-0"
+                            aria-label={
+                              entry.kind === "income"
+                                ? "Mark received"
+                                : "Mark paid"
+                            }
+                            title={
+                              entry.kind === "income"
+                                ? "Mark received"
+                                : "Mark paid"
+                            }
                             onClick={() => settleEntry(entry)}
                           >
-                            <CircleCheck data-icon="inline-start" />
-                            {entry.kind === "income"
-                              ? "Mark received"
-                              : "Mark paid"}
+                            <CircleCheck />
                           </Button>
                         ) : null}
                         <span className="flex shrink-0 items-center opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 max-md:opacity-100">
@@ -369,10 +389,10 @@ export function FinanceOverview({
                     ),
                   )}
                 </ul>
-              </div>
-            ))}
-          </div>
-        )}
+              )}
+            </div>
+          ))}
+        </div>
       </section>
     </div>
   );
@@ -524,7 +544,7 @@ function EntryForm({
           ) : (
             <>
               <Plus data-icon="inline-start" />
-              {draft.kind === "income" ? "Add income" : "Add expense"}
+              {draft.kind === "income" ? "Add income" : "Add outcome"}
             </>
           )}
         </Button>

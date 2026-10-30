@@ -215,6 +215,44 @@ export async function getSavingsGoals(
   return rows.map(serializeSavingsGoal);
 }
 
+export type MonthSummary = {
+  month: string;
+  incomeCents: number;
+  outcomeCents: number;
+};
+
+/** Settled income and outcome per month of `year`; expected entries are left out. */
+export async function getYearSummary(
+  userId: string,
+  year: number,
+  today: string,
+): Promise<MonthSummary[]> {
+  await ensureFinanceSetup(userId);
+  await postDueBills(userId, today);
+  const rows = await db
+    .select()
+    .from(financeEntry)
+    .where(
+      and(
+        eq(financeEntry.userId, userId),
+        eq(financeEntry.expected, false),
+        gte(financeEntry.date, `${year}-01-01`),
+        lte(financeEntry.date, `${year}-12-31`),
+      ),
+    );
+  const months = Array.from({ length: 12 }, (_, index) => ({
+    month: `${year}-${String(index + 1).padStart(2, "0")}`,
+    incomeCents: 0,
+    outcomeCents: 0,
+  }));
+  for (const row of rows) {
+    const summary = months[Number(row.date.slice(5, 7)) - 1];
+    if (row.kind === "income") summary.incomeCents += row.amountCents;
+    else summary.outcomeCents += row.amountCents;
+  }
+  return months;
+}
+
 /** Everything a month view needs, after posting bills that came due. */
 export async function getFinanceMonth(
   userId: string,
