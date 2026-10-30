@@ -439,46 +439,10 @@ export const budgetItem = pgTable(
     startDate: date("start_date").notNull(),
     /** Last day auto-posting has run for; later due dates are still pending. */
     postedThrough: date("posted_through"),
-    notes: text("notes"),
-    /** Repeats every month from `startDate`; otherwise it belongs to that month only. */
-    repeats: boolean("repeats").notNull().default(true),
-    /** Last month (`YYYY-MM`) a repeating item applies to; null means no end. */
-    endMonth: text("end_month"),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (t) => [index("budget_item_user_id_idx").on(t.userId)],
-);
-
-/** One month's own copy of a repeating budget item; wins over the item's values for that month. */
-export const budgetItemMonth = pgTable(
-  "budget_item_month",
-  {
-    id: uuid("id").primaryKey().defaultRandom(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    budgetItemId: uuid("budget_item_id")
-      .notNull()
-      .references(() => budgetItem.id, { onDelete: "cascade" }),
-    /** `YYYY-MM`. */
-    month: text("month").notNull(),
-    categoryId: uuid("category_id").references(() => financeCategory.id, {
-      onDelete: "set null",
-    }),
-    name: text("name").notNull(),
-    amountCents: integer("amount_cents").notNull(),
-    dueDay: integer("due_day"),
-    notes: text("notes"),
-    /** Taken out of this month only. */
-    removed: boolean("removed").notNull().default(false),
-    createdAt: timestamp("created_at").notNull().defaultNow(),
-    updatedAt: timestamp("updated_at").notNull().defaultNow(),
-  },
-  (t) => [
-    uniqueIndex("budget_item_month_item_month_idx").on(t.budgetItemId, t.month),
-    index("budget_item_month_user_month_idx").on(t.userId, t.month),
-  ],
 );
 
 export const financeEntry = pgTable(
@@ -529,7 +493,6 @@ export const savingsGoal = pgTable(
 
 export type List = typeof list.$inferSelect;
 export type DayBlock = typeof dayBlock.$inferSelect;
-export type BudgetItemMonth = typeof budgetItemMonth.$inferSelect;
 export type Activity = typeof activity.$inferSelect;
 export type ActivityGroup = typeof activityGroup.$inferSelect;
 export type ActivityGroupKind = (typeof activityGroupKind.enumValues)[number];

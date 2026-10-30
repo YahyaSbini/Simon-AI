@@ -15,18 +15,6 @@ try {
       },
     );
   }
-  // Budget items now belong to the month they start in. Older bills whose first
-  // due date fell before their start date really began the next month.
-  await sql`
-    update budget_item
-    set start_date = (date_trunc('month', start_date) + interval '1 month')::date
-    where due_day is not null
-      and extract(day from start_date) > least(
-        due_day,
-        extract(day from date_trunc('month', start_date) + interval '1 month - 1 day')
-      )`.catch((error) => {
-    if (error.code !== "42P01") throw error;
-  });
 } finally {
   await sql.end();
 }

@@ -68,12 +68,7 @@ export type BudgetItemRow = {
   categoryId: string | null;
   amountCents: number;
   dueDay: number | null;
-  notes: string | null;
-  /** First day of the month the item starts in. */
   startDate: string;
-  repeats: boolean;
-  /** Last month a repeating item runs, `YYYY-MM`. */
-  endMonth: string | null;
 };
 
 export type SavingsGoalItem = {
