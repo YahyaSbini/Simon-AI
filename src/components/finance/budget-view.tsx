@@ -332,7 +332,9 @@ export function BudgetView({
             showRepeat
             hint={(draft) =>
               !item.repeats
-                ? null
+                ? draft.repeats
+                  ? `Continues every month after ${formatMonth(month)}.`
+                  : null
                 : draft.repeats
                   ? `Changes apply to ${formatMonth(month)} only.`
                   : `Stops repeating after ${formatMonth(month)}.`

@@ -11,7 +11,7 @@ import {
   valuesIn,
   valuesOf,
 } from "@/lib/finance";
-import { addMonths, monthOf } from "@/lib/money";
+import { addMonths, monthBounds, monthOf } from "@/lib/money";
 import { requireUserId } from "@/lib/session";
 import { getTimeZone, todayIn } from "@/lib/timezone";
 import { budgetItemInput, monthKey } from "@/lib/validation";
@@ -99,6 +99,12 @@ async function freezeThrough(item: BudgetItem, through: string) {
     .onConflictDoNothing();
 }
 
+/** Lets bill posting revisit months after `month` once an item runs past it again. */
+function rewind(postedThrough: string | null, month: string) {
+  const { end } = monthBounds(month);
+  return postedThrough && postedThrough > end ? end : postedThrough;
+}
+
 export async function PATCH(request: Request, { params }: RouteContext) {
   const userId = await requireUserId();
 
@@ -168,7 +174,13 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       .update(budgetItem)
       .set({
         ...values,
-        ...(repeats ? { repeats: true, endMonth: null } : {}),
+        ...(repeats
+          ? {
+              repeats: true,
+              endMonth: null,
+              postedThrough: rewind(item.postedThrough, first),
+            }
+          : {}),
         updatedAt,
       })
       .where(eq(budgetItem.id, id));
@@ -182,7 +194,16 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       .where(eq(budgetItemMonth.budgetItemId, id));
   } else {
     await saveMonth(item, month, values);
-    if (repeats === false) {
+    if (repeats && item.endMonth === month) {
+      await db
+        .update(budgetItem)
+        .set({
+          endMonth: null,
+          postedThrough: rewind(item.postedThrough, month),
+          updatedAt,
+        })
+        .where(eq(budgetItem.id, id));
+    } else if (repeats === false) {
       await db
         .update(budgetItem)
         .set({ endMonth: month, updatedAt })

@@ -240,44 +240,48 @@ export async function postMonthIfDue(
   month: string,
   today: string,
 ) {
-  const [item] = await db
-    .select()
-    .from(budgetItem)
-    .where(and(eq(budgetItem.id, itemId), eq(budgetItem.userId, userId)));
-  if (!item || !appliesIn(item, month)) return;
-  const [override] = await db
-    .select()
-    .from(budgetItemMonth)
-    .where(
-      and(
-        eq(budgetItemMonth.budgetItemId, itemId),
-        eq(budgetItemMonth.month, month),
-      ),
-    );
-  const values = valuesIn(item, override);
-  if (!values?.dueDay) return;
-  const due = dueDateIn(month, values.dueDay);
-  if (due < item.startDate || due > today) return;
-  const { start, end } = monthBounds(month);
-  const [posted] = await db
-    .select({ id: financeEntry.id })
-    .from(financeEntry)
-    .where(
-      and(
-        eq(financeEntry.budgetItemId, itemId),
-        gte(financeEntry.date, start),
-        lte(financeEntry.date, end),
-      ),
-    );
-  if (posted) return;
-  await db.insert(financeEntry).values({
-    userId,
-    kind: "expense",
-    amountCents: values.amountCents,
-    categoryId: values.categoryId,
-    budgetItemId: itemId,
-    date: due,
-    note: values.name,
+  // Locks the item row so this and `postDueBills` never post the same month twice.
+  await db.transaction(async (tx) => {
+    const [item] = await tx
+      .select()
+      .from(budgetItem)
+      .where(and(eq(budgetItem.id, itemId), eq(budgetItem.userId, userId)))
+      .for("update");
+    if (!item || !appliesIn(item, month)) return;
+    const [override] = await tx
+      .select()
+      .from(budgetItemMonth)
+      .where(
+        and(
+          eq(budgetItemMonth.budgetItemId, itemId),
+          eq(budgetItemMonth.month, month),
+        ),
+      );
+    const values = valuesIn(item, override);
+    if (!values?.dueDay) return;
+    const due = dueDateIn(month, values.dueDay);
+    if (due < item.startDate || due > today) return;
+    const { start, end } = monthBounds(month);
+    const [posted] = await tx
+      .select({ id: financeEntry.id })
+      .from(financeEntry)
+      .where(
+        and(
+          eq(financeEntry.budgetItemId, itemId),
+          gte(financeEntry.date, start),
+          lte(financeEntry.date, end),
+        ),
+      );
+    if (posted) return;
+    await tx.insert(financeEntry).values({
+      userId,
+      kind: "expense",
+      amountCents: values.amountCents,
+      categoryId: values.categoryId,
+      budgetItemId: itemId,
+      date: due,
+      note: values.name,
+    });
   });
 }
 
@@ -334,7 +338,9 @@ export async function getBudgetMonth(
   return items.flatMap((item) => {
     if (!appliesIn(item, month)) return [];
     const values = valuesIn(item, byItem.get(item.id));
-    return values ? [serializeBudgetItem({ ...item, ...values })] : [];
+    // Repeats only if it carries on after this month.
+    const repeats = item.repeats && (!item.endMonth || item.endMonth > month);
+    return values ? [serializeBudgetItem({ ...item, ...values, repeats })] : [];
   });
 }
 
