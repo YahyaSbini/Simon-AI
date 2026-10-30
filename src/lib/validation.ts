@@ -155,12 +155,7 @@ export const budgetItemInput = z.object({
   amountCents: cents,
   categoryId: z.string().uuid().nullish(),
   dueDay: z.number().int().min(1).max(31).nullish(),
-  notes: z.string().trim().max(500).nullish(),
 });
-
-export const monthKey = z
-  .string()
-  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Use YYYY-MM.");
 
 export const savingsGoalInput = z.object({
   name: z.string().trim().min(1).max(80),
