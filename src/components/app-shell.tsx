@@ -187,7 +187,7 @@ export function AppShell({
         <main
           className={cn(
             "mx-auto w-full flex-1 px-4 py-6 md:px-8 md:py-10",
-            moduleId === "time"
+            moduleId === "time" || pathname.startsWith("/finance/budget")
               ? "max-w-7xl"
               : wide
                 ? "max-w-5xl"

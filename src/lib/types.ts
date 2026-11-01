@@ -76,6 +76,7 @@ export type MoneyItemRow = {
 
 export type BudgetItemRow = {
   id: string;
+  kind: "income" | "expense";
   name: string;
   categoryId: string | null;
   amountCents: number;

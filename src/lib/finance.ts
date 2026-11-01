@@ -13,7 +13,7 @@ import {
   financeSettings,
   savingsGoal,
 } from "@/db/schema";
-import { activeIn } from "@/lib/budget";
+import { activeIn, outcomeItems } from "@/lib/budget";
 import { addMonths, dueDateIn, monthBounds, monthOf } from "@/lib/money";
 import { fillItemMonths } from "@/lib/money-items";
 import type {
@@ -56,6 +56,7 @@ export function serializeEntry(row: FinanceEntry): EntryItem {
 export function serializeBudgetItem(row: BudgetItem): BudgetItemRow {
   return {
     id: row.id,
+    kind: row.kind,
     name: row.name,
     categoryId: row.categoryId,
     amountCents: row.amountCents,
@@ -275,7 +276,7 @@ export async function getBudgetYearSummary(
   ]);
   return summary.map((item) => ({
     month: item.month,
-    plannedCents: activeIn(items, item.month).reduce(
+    plannedCents: activeIn(outcomeItems(items), item.month).reduce(
       (sum, row) => sum + row.amountCents,
       0,
     ),

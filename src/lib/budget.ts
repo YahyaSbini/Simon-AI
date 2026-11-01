@@ -3,6 +3,7 @@ import type { BudgetItemRow, EntryItem } from "@/lib/types";
 
 export type BudgetLine = {
   item: BudgetItemRow;
+  /** Paid or spent for outcome items, received for income items. */
   spentCents: number;
   /** Bills only: the date this month's payment falls on, and whether it has posted. */
   dueDate: string | null;
@@ -17,6 +18,10 @@ export type MonthTotals = {
   expectedIncomeCents: number;
   expectedSpendCents: number;
 };
+
+export function outcomeItems(items: BudgetItemRow[]) {
+  return items.filter((item) => item.kind === "expense");
+}
 
 /** Budget items that existed during `month`. */
 export function activeIn(items: BudgetItemRow[], month: string) {
@@ -45,7 +50,7 @@ export function budgetLines(
     const spentCents = entries
       .filter(
         (entry) =>
-          entry.kind === "expense" &&
+          entry.kind === item.kind &&
           !entry.budgetItemId &&
           item.categoryId !== null &&
           entry.categoryId === item.categoryId,
@@ -72,7 +77,7 @@ export function monthTotals(
     } else if (entry.kind === "income") incomeCents += entry.amountCents;
     else spentCents += entry.amountCents;
   }
-  const budgetedCents = activeIn(items, month).reduce(
+  const budgetedCents = activeIn(outcomeItems(items), month).reduce(
     (sum, item) => sum + item.amountCents,
     0,
   );
