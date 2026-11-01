@@ -151,6 +151,7 @@ export const categoryInput = z.object({
 });
 
 export const budgetItemInput = z.object({
+  kind: entryKind.default("expense"),
   name: z.string().trim().min(1).max(80),
   amountCents: cents,
   categoryId: z.string().uuid().nullish(),

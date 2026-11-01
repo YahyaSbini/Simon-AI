@@ -34,7 +34,12 @@ export async function POST(request: Request) {
   const today = todayIn(await getTimeZone());
   const [created] = await db
     .insert(budgetItem)
-    .values({ ...parsed.data, userId, startDate: today })
+    .values({
+      ...parsed.data,
+      dueDay: parsed.data.kind === "income" ? null : parsed.data.dueDay,
+      userId,
+      startDate: today,
+    })
     .returning();
 
   await postDueBills(userId, today);

@@ -12,7 +12,8 @@ import { requireUserId } from "@/lib/session";
 import { getTimeZone, todayIn } from "@/lib/timezone";
 import { budgetItemInput } from "@/lib/validation";
 
-const updateSchema = budgetItemInput.partial();
+/** An item stays in its Income or Outcome column once created. */
+const updateSchema = budgetItemInput.omit({ kind: true }).partial();
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -52,6 +53,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   }
 
   const today = todayIn(await getTimeZone());
+  if (current.kind === "income") parsed.data.dueDay = null;
   const rescheduled =
     parsed.data.dueDay !== undefined && parsed.data.dueDay !== current.dueDay;
   const resumeFrom = dayBefore(today);

@@ -22,6 +22,7 @@ import {
 import type { BudgetItemRow, CategoryItem, EntryItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+type Kind = BudgetItemRow["kind"];
 type ItemType = "bill" | "limit";
 
 type Draft = {
@@ -36,6 +37,14 @@ const typeOptions: { value: ItemType; label: string }[] = [
   { value: "bill", label: "Bill" },
   { value: "limit", label: "Limit" },
 ];
+
+const emptyDraft: Draft = {
+  type: "bill",
+  name: "",
+  amount: "",
+  categoryId: "",
+  dueDay: "1",
+};
 
 type Saved = { item: BudgetItemRow; posted: EntryItem[] };
 
@@ -55,27 +64,35 @@ export function BudgetView({
   const [items, setItems] = useState(initialItems);
   const [entries, setEntries] = useState(initialEntries);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [adding, setAdding] = useState<Kind | null>(null);
   const [saving, setSaving] = useState(false);
-  const expenseCategories = categories.filter(
-    (item) => item.kind === "expense",
-  );
   const categoryName = useMemo(
     () => new Map(categories.map((item) => [item.id, item.name])),
     [categories],
   );
   const lines = budgetLines(items, entries, month);
-  const bills = lines.filter((line) => line.item.dueDay);
-  const limits = lines.filter((line) => !line.item.dueDay);
-  const budgeted = lines.reduce((sum, line) => sum + line.item.amountCents, 0);
-  const spent = entries
-    .filter((entry) => entry.kind === "expense" && !entry.expected)
-    .reduce((sum, entry) => sum + entry.amountCents, 0);
+  const settled = entries.filter((entry) => !entry.expected);
   const money = (cents: number) => formatMoney(cents);
 
-  function toPayload(draft: Draft) {
+  const columns = (["income", "expense"] as const).map((kind) => {
+    const mine = lines.filter((line) => line.item.kind === kind);
+    return {
+      kind,
+      label: kind === "income" ? "Income" : "Outcome",
+      lines: mine,
+      categories: categories.filter((item) => item.kind === kind),
+      planned: mine.reduce((sum, line) => sum + line.item.amountCents, 0),
+      actual: settled
+        .filter((entry) => entry.kind === kind)
+        .reduce((sum, entry) => sum + entry.amountCents, 0),
+    };
+  });
+
+  function toPayload(kind: Kind, draft: Draft) {
     const name = draft.name.trim();
     const amountCents = parseAmount(draft.amount);
     const dueDay = Number(draft.dueDay);
+    const bill = kind === "expense" && draft.type === "bill";
     if (!name) {
       toast.error("Give the item a name.");
       return null;
@@ -84,19 +101,23 @@ export function BudgetView({
       toast.error("Enter an amount above zero.");
       return null;
     }
-    if (draft.type === "bill" && !(dueDay >= 1 && dueDay <= 31)) {
+    if (bill && !(dueDay >= 1 && dueDay <= 31)) {
       toast.error("Pick the day of the month it's paid, 1 to 31.");
       return null;
     }
-    if (draft.type === "limit" && !draft.categoryId) {
-      toast.error("A limit tracks a category. Pick one.");
+    if (!bill && !draft.categoryId) {
+      toast.error(
+        kind === "income"
+          ? "Income is counted by category. Pick one."
+          : "A limit tracks a category. Pick one.",
+      );
       return null;
     }
     return {
       name,
       amountCents,
       categoryId: draft.categoryId || null,
-      dueDay: draft.type === "bill" ? dueDay : null,
+      dueDay: bill ? dueDay : null,
     };
   }
 
@@ -109,15 +130,14 @@ export function BudgetView({
     ]);
   }
 
-  async function createItem(draft: Draft) {
-    const payload = toPayload(draft);
+  async function createItem(kind: Kind, draft: Draft) {
+    const payload = toPayload(kind, draft);
     if (!payload) return false;
     setSaving(true);
-    const result = await sendJson<Saved>(
-      "/api/finance/budget-items",
-      "POST",
-      payload,
-    );
+    const result = await sendJson<Saved>("/api/finance/budget-items", "POST", {
+      ...payload,
+      kind,
+    });
     setSaving(false);
     if (!result) {
       toast.error("Couldn't add that budget item.");
@@ -126,13 +146,13 @@ export function BudgetView({
     setItems((current) => [...current, result.item]);
     mergePosted(result.posted);
     if (result.posted.length) {
-      toast.success(`${result.item.name} posted as today's expense.`);
+      toast.success(`${result.item.name} posted as today's outcome.`);
     }
     return true;
   }
 
   async function updateItem(item: BudgetItemRow, draft: Draft) {
-    const payload = toPayload(draft);
+    const payload = toPayload(item.kind, draft);
     if (!payload) return false;
     const result = await sendJson<Saved>(
       `/api/finance/budget-items/${item.id}`,
@@ -166,23 +186,40 @@ export function BudgetView({
 
   function status(line: BudgetLine): string {
     const { item } = line;
-    if (!item.dueDay) {
-      return `${money(line.spentCents)} of ${money(item.amountCents)}`;
-    }
-    if (line.paid) return `Paid ${money(line.spentCents)}`;
+    if (item.kind === "income") return "received";
+    if (!item.dueDay) return "spent";
+    if (line.paid) return "paid";
     if (!line.dueDate) {
-      return `Starts ${formatShortDate(dueDateIn(addMonths(month, 1), item.dueDay))}`;
+      return `starts ${formatShortDate(dueDateIn(addMonths(month, 1), item.dueDay))}`;
     }
-    if (line.dueDate >= today) return `Due ${formatShortDate(line.dueDate)}`;
-    return "Not posted";
+    if (line.dueDate >= today) return `due ${formatShortDate(line.dueDate)}`;
+    return "not posted";
   }
 
-  function renderLine(line: BudgetLine) {
+  function remainder(line: BudgetLine) {
+    const { item, spentCents } = line;
+    const diff = item.amountCents - spentCents;
+    if (item.kind === "income") {
+      return diff >= 0
+        ? { text: `${money(diff)} to receive`, over: false }
+        : { text: `${money(-diff)} above plan`, over: false };
+    }
+    if (item.dueDay) return null;
+    return diff >= 0
+      ? { text: `${money(diff)} left`, over: false }
+      : { text: `${money(-diff)} over`, over: true };
+  }
+
+  function renderBox(line: BudgetLine, kindCategories: CategoryItem[]) {
     const { item } = line;
     if (editingId === item.id) {
       return (
-        <li key={item.id} className="py-1">
+        <li
+          key={item.id}
+          className="border-border bg-card rounded-xl border p-3 sm:col-span-2"
+        >
           <ItemForm
+            kind={item.kind}
             initial={{
               type: item.dueDay ? "bill" : "limit",
               name: item.name,
@@ -190,7 +227,7 @@ export function BudgetView({
               categoryId: item.categoryId ?? "",
               dueDay: item.dueDay ? String(item.dueDay) : "",
             }}
-            categories={expenseCategories}
+            categories={kindCategories}
             onSubmit={(draft) => updateItem(item, draft)}
             onCancel={() => setEditingId(null)}
           />
@@ -198,7 +235,8 @@ export function BudgetView({
       );
     }
 
-    const over = !item.dueDay && line.spentCents > item.amountCents;
+    const rest = remainder(line);
+    const showActual = !item.dueDay || line.paid;
     const detail = [
       item.categoryId ? categoryName.get(item.categoryId) : null,
       item.dueDay ? `Posts on the ${ordinal(item.dueDay)}` : null,
@@ -207,29 +245,21 @@ export function BudgetView({
       .join(" · ");
 
     return (
-      <li key={item.id} className="group/row space-y-2 py-3">
-        <div className="flex items-center gap-3">
+      <li
+        key={item.id}
+        className={cn(
+          "group/row border-border bg-card flex flex-col gap-3 rounded-xl border p-4 transition-colors",
+          rest?.over && "border-destructive/50",
+        )}
+      >
+        <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{item.name}</p>
             {detail ? (
               <p className="text-muted-foreground truncate text-sm">{detail}</p>
             ) : null}
           </div>
-          <div className="shrink-0 text-right text-sm tabular-nums">
-            <p className={cn(over && "text-destructive")}>{status(line)}</p>
-            {item.dueDay ? (
-              <p className="text-muted-foreground">{money(item.amountCents)}</p>
-            ) : over ? (
-              <p className="text-destructive">
-                {money(line.spentCents - item.amountCents)} over
-              </p>
-            ) : (
-              <p className="text-muted-foreground">
-                {money(item.amountCents - line.spentCents)} left
-              </p>
-            )}
-          </div>
-          <span className="flex shrink-0 items-center opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 max-md:opacity-100">
+          <span className="-mt-1 -mr-2 flex shrink-0 items-center opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 max-md:opacity-100">
             <Button
               type="button"
               variant="ghost"
@@ -251,57 +281,102 @@ export function BudgetView({
             </Button>
           </span>
         </div>
-        {!item.dueDay ? (
-          <Meter
-            value={line.spentCents}
-            max={item.amountCents}
-            label={`${item.name} spent`}
-          />
-        ) : null}
+        <div className="mt-auto space-y-2">
+          <p className="text-sm tabular-nums">
+            <span
+              className={cn(
+                "font-heading text-xl",
+                rest?.over && "text-destructive",
+              )}
+            >
+              {money(showActual ? line.spentCents : item.amountCents)}
+            </span>{" "}
+            <span className="text-muted-foreground">
+              {showActual
+                ? `${status(line)} of ${money(item.amountCents)}`
+                : status(line)}
+            </span>
+          </p>
+          {!item.dueDay ? (
+            <Meter
+              value={line.spentCents}
+              max={item.amountCents}
+              label={`${item.name} ${status(line)}`}
+            />
+          ) : null}
+          {rest ? (
+            <p
+              className={cn(
+                "text-sm tabular-nums",
+                rest.over
+                  ? "text-destructive font-medium"
+                  : "text-muted-foreground",
+              )}
+            >
+              {rest.text}
+            </p>
+          ) : null}
+        </div>
       </li>
     );
   }
 
   return (
-    <div className="space-y-8">
-      <section className="space-y-2">
-        <p className="text-sm">
-          <span className="font-heading text-2xl tabular-nums">
-            {money(spent)}
-          </span>{" "}
-          <span className="text-muted-foreground">
-            spent of {money(budgeted)} planned
-          </span>
-        </p>
-        <Meter value={spent} max={budgeted} label="Spent against budget" />
-      </section>
+    <div className="space-y-4">
+      <div className="grid gap-8 lg:grid-cols-2">
+        {columns.map((column) => (
+          <section key={column.kind} className="min-w-0 space-y-3">
+            <div className="space-y-2">
+              <h2 className="text-muted-foreground flex items-baseline justify-between gap-3 text-xs tracking-wide uppercase">
+                {column.label}
+                <span className="tabular-nums normal-case">
+                  {money(column.actual)} of {money(column.planned)}
+                </span>
+              </h2>
+              <Meter
+                value={column.actual}
+                max={column.planned}
+                label={`${column.label} against budget`}
+              />
+            </div>
 
-      <BudgetGroup
-        title="Bills"
-        empty="Rent, subscriptions and other fixed costs. Each one posts itself as an expense on its day."
-      >
-        {bills.map(renderLine)}
-      </BudgetGroup>
+            {column.lines.length ? (
+              <ul className="grid gap-3 sm:grid-cols-2">
+                {column.lines.map((line) => renderBox(line, column.categories))}
+              </ul>
+            ) : (
+              <p className="text-muted-foreground border-border rounded-xl border border-dashed px-4 py-6 text-center text-sm">
+                {column.kind === "income"
+                  ? "Plan what you expect to receive, like Salary. Income in that category counts toward it."
+                  : "Bills post themselves on their day. Limits cap a category, like Groceries."}
+              </p>
+            )}
 
-      <BudgetGroup
-        title="Limits"
-        empty="A monthly cap for a category, like Groceries. Expenses in that category count toward it."
-      >
-        {limits.map(renderLine)}
-      </BudgetGroup>
-
-      <ItemForm
-        initial={{
-          type: "bill",
-          name: "",
-          amount: "",
-          categoryId: "",
-          dueDay: "1",
-        }}
-        categories={expenseCategories}
-        saving={saving}
-        onSubmit={createItem}
-      />
+            {adding === column.kind ? (
+              <div className="border-border bg-card rounded-xl border p-3">
+                <ItemForm
+                  kind={column.kind}
+                  initial={emptyDraft}
+                  categories={column.categories}
+                  saving={saving}
+                  onSubmit={(draft) => createItem(column.kind, draft)}
+                  onCancel={() => setAdding(null)}
+                />
+              </div>
+            ) : (
+              <Button
+                type="button"
+                variant="ghost"
+                className="text-muted-foreground"
+                onClick={() => setAdding(column.kind)}
+              >
+                <Plus data-icon="inline-start" />
+                Add {column.label.toLowerCase()}
+              </Button>
+            )}
+          </section>
+        ))}
+      </div>
       {month !== monthOf(today) ? (
         <p className="text-muted-foreground text-sm">
           New items start from today, not from {formatMonth(month)}.
@@ -311,44 +386,24 @@ export function BudgetView({
   );
 }
 
-function BudgetGroup({
-  title,
-  empty,
-  children,
-}: {
-  title: string;
-  empty: string;
-  children: React.ReactNode[];
-}) {
-  return (
-    <section>
-      <h2 className="text-muted-foreground border-border border-b pb-2 text-xs tracking-wide uppercase">
-        {title}
-      </h2>
-      {children.length ? (
-        <ul className="divide-border divide-y">{children}</ul>
-      ) : (
-        <p className="text-muted-foreground py-3 text-sm">{empty}</p>
-      )}
-    </section>
-  );
-}
-
 function ItemForm({
+  kind,
   initial,
   categories,
   saving = false,
   onSubmit,
   onCancel,
 }: {
+  kind: Kind;
   initial: Draft;
   categories: CategoryItem[];
   saving?: boolean;
   onSubmit: (draft: Draft) => Promise<boolean>;
-  onCancel?: () => void;
+  onCancel: () => void;
 }) {
   const [draft, setDraft] = useState<Draft>(initial);
-  const editing = Boolean(onCancel);
+  const editing = Boolean(initial.name);
+  const bill = kind === "expense" && draft.type === "bill";
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -357,26 +412,28 @@ function ItemForm({
   }
 
   return (
-    <form
-      onSubmit={submit}
-      className={cn(
-        "flex flex-wrap items-center gap-2 rounded-md",
-        editing && "bg-muted/50 -mx-2 px-2 py-2",
-      )}
-    >
-      <Segmented
-        label="Item type"
-        value={draft.type}
-        options={typeOptions}
-        onChange={(type) => setDraft({ ...draft, type })}
-      />
+    <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
+      {kind === "expense" ? (
+        <Segmented
+          label="Item type"
+          value={draft.type}
+          options={typeOptions}
+          onChange={(type) => setDraft({ ...draft, type })}
+        />
+      ) : null}
       <Input
         value={draft.name}
         onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-        placeholder={draft.type === "bill" ? "e.g. Rent, Netflix" : "e.g. Food"}
+        placeholder={
+          kind === "income"
+            ? "e.g. Salary"
+            : bill
+              ? "e.g. Rent, Netflix"
+              : "e.g. Food"
+        }
         aria-label="Name"
         maxLength={80}
-        autoFocus={editing}
+        autoFocus
         className="min-w-36 flex-1"
       />
       <Input
@@ -395,16 +452,14 @@ function ItemForm({
         aria-label="Category"
         className={cn(selectClass, "w-36")}
       >
-        <option value="">
-          {draft.type === "limit" ? "Pick category" : "No category"}
-        </option>
+        <option value="">{bill ? "No category" : "Pick category"}</option>
         {categories.map((item) => (
           <option key={item.id} value={item.id}>
             {item.name}
           </option>
         ))}
       </select>
-      {draft.type === "bill" ? (
+      {bill ? (
         <label className="text-muted-foreground flex items-center gap-1.5 text-sm">
           Day
           <Input
@@ -421,17 +476,15 @@ function ItemForm({
         </label>
       ) : null}
       <div className="flex items-center gap-1">
-        {onCancel ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label="Cancel"
-            onClick={onCancel}
-          >
-            <X />
-          </Button>
-        ) : null}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label="Cancel"
+          onClick={onCancel}
+        >
+          <X />
+        </Button>
         <Button
           type="submit"
           size={editing ? "icon" : "default"}
@@ -443,7 +496,11 @@ function ItemForm({
           ) : (
             <>
               <Plus data-icon="inline-start" />
-              {draft.type === "bill" ? "Add bill" : "Add limit"}
+              {kind === "income"
+                ? "Add income"
+                : bill
+                  ? "Add bill"
+                  : "Add limit"}
             </>
           )}
         </Button>

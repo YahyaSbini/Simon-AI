@@ -432,6 +432,7 @@ export const budgetItem = pgTable(
     categoryId: uuid("category_id").references(() => financeCategory.id, {
       onDelete: "set null",
     }),
+    kind: entryKind("kind").notNull().default("expense"),
     name: text("name").notNull(),
     amountCents: integer("amount_cents").notNull(),
     /** Day of month (1–31) the bill posts itself as an expense. */
