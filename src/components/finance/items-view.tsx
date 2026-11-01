@@ -10,9 +10,15 @@ import {
 } from "@/components/collapsible";
 import { sendJson } from "@/components/finance/finance-bits";
 import { selectClass } from "@/components/task-detail";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   addMonths,
   formatMoney,
@@ -163,22 +169,29 @@ export function ItemsView({
       );
     }
 
-    const detail = [
-      item.categoryId ? categoryName.get(item.categoryId) : null,
-      item.repeats
-        ? `Every month on the ${ordinal(item.day)}, from ${formatMonth(item.startMonth)}`
-        : `Once, ${ordinal(item.day)} of ${formatMonth(item.startMonth)}`,
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    const category = item.categoryId
+      ? categoryName.get(item.categoryId)
+      : undefined;
+    const repetition = item.repeats
+      ? `Every month on the ${ordinal(item.day)}, from ${formatMonth(item.startMonth)}`
+      : `Once, ${ordinal(item.day)} of ${formatMonth(item.startMonth)}`;
 
     return (
       <li key={item.id} className="group/row py-1.5">
         <div className="flex items-center gap-3">
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{item.name}</p>
-            <p className="text-muted-foreground truncate text-sm">{detail}</p>
-          </div>
+          <Tooltip>
+            <TooltipTrigger className="flex min-w-0 flex-1 cursor-default items-center gap-2 rounded-sm text-left outline-none focus-visible:ring-2 focus-visible:ring-ring/50">
+              <span className="truncate text-sm font-medium">{item.name}</span>
+              {category ? (
+                <Badge variant="secondary" className="font-normal">
+                  {category}
+                </Badge>
+              ) : null}
+            </TooltipTrigger>
+            <TooltipContent side="top" align="start">
+              {repetition}
+            </TooltipContent>
+          </Tooltip>
           <span
             className={cn(
               "shrink-0 text-sm tabular-nums",
