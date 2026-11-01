@@ -14,6 +14,7 @@ import {
   savingsGoal,
 } from "@/db/schema";
 import { addMonths, dueDateIn, monthBounds, monthOf } from "@/lib/money";
+import { fillItemMonths } from "@/lib/money-items";
 import type {
   BudgetItemRow,
   CategoryItem,
@@ -44,6 +45,7 @@ export function serializeEntry(row: FinanceEntry): EntryItem {
     amountCents: row.amountCents,
     categoryId: row.categoryId,
     budgetItemId: row.budgetItemId,
+    moneyItemId: row.moneyItemId,
     date: row.date,
     note: row.note,
     expected: row.expected,
@@ -229,6 +231,7 @@ export async function getYearSummary(
 ): Promise<MonthSummary[]> {
   await ensureFinanceSetup(userId);
   await postDueBills(userId, today);
+  await fillItemMonths(userId, today);
   const rows = await db
     .select()
     .from(financeEntry)
@@ -261,6 +264,7 @@ export async function getFinanceMonth(
 ) {
   await ensureFinanceSetup(userId);
   await postDueBills(userId, today);
+  await fillItemMonths(userId, today);
   const [categories, entries, budget] = await Promise.all([
     getCategories(userId),
     getMonthEntries(userId, month),

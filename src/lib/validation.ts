@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { maxCents } from "@/lib/money";
+import { isMonthKey, maxCents } from "@/lib/money";
 
 export const dateKey = z
   .string()
@@ -156,6 +156,21 @@ export const budgetItemInput = z.object({
   categoryId: z.string().uuid().nullish(),
   dueDay: z.number().int().min(1).max(31).nullish(),
 });
+
+export const moneyItemInput = z.object({
+  kind: entryKind,
+  name: z.string().trim().min(1).max(80),
+  amountCents: cents,
+  categoryId: z.string().uuid().nullish(),
+  day: z.number().int().min(1).max(31),
+  repeats: z.boolean(),
+  startMonth: z.string().refine(isMonthKey),
+});
+
+/** The start month is fixed once an item exists. */
+export const moneyItemUpdate = moneyItemInput
+  .omit({ startMonth: true })
+  .partial();
 
 export const savingsGoalInput = z.object({
   name: z.string().trim().min(1).max(80),

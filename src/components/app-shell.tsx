@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ArrowLeftRight,
   CalendarClock,
   CalendarRange,
   CheckCheck,
@@ -90,6 +91,7 @@ export const modules: Module[] = [
     routes: ["/finance"],
     views: [
       { href: "/finance", label: "Income and Outcomes", icon: Landmark },
+      { href: "/finance/items", label: "In/Out Items", icon: ArrowLeftRight },
       { href: "/finance/budget", label: "Budget", icon: Wallet },
       { href: "/finance/savings", label: "Savings", icon: PiggyBank },
       { href: "/finance/categories", label: "Categories", icon: Tags },
