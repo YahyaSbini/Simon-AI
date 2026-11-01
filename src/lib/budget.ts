@@ -1,71 +1,14 @@
-import { dueDateIn, monthBounds } from "@/lib/money";
-import type { BudgetItemRow, EntryItem } from "@/lib/types";
-
-export type BudgetLine = {
-  item: BudgetItemRow;
-  /** Paid or spent for outcome items, received for income items. */
-  spentCents: number;
-  /** Bills only: the date this month's payment falls on, and whether it has posted. */
-  dueDate: string | null;
-  paid: boolean;
-};
+import type { EntryItem } from "@/lib/types";
 
 export type MonthTotals = {
   incomeCents: number;
   spentCents: number;
-  budgetedCents: number;
   /** Expected entries, kept apart from the received and paid figures. */
   expectedIncomeCents: number;
   expectedSpendCents: number;
 };
 
-export function outcomeItems(items: BudgetItemRow[]) {
-  return items.filter((item) => item.kind === "expense");
-}
-
-/** Budget items that existed during `month`. */
-export function activeIn(items: BudgetItemRow[], month: string) {
-  const { end } = monthBounds(month);
-  return items.filter((item) => item.startDate <= end);
-}
-
-export function budgetLines(
-  items: BudgetItemRow[],
-  allEntries: EntryItem[],
-  month: string,
-): BudgetLine[] {
-  const entries = allEntries.filter((entry) => !entry.expected);
-  return activeIn(items, month).map((item) => {
-    if (item.dueDay) {
-      const posted = entries.filter((entry) => entry.budgetItemId === item.id);
-      const due = dueDateIn(month, item.dueDay);
-      return {
-        item,
-        spentCents: posted.reduce((sum, entry) => sum + entry.amountCents, 0),
-        dueDate: due >= item.startDate ? due : null,
-        paid: posted.length > 0,
-      };
-    }
-
-    const spentCents = entries
-      .filter(
-        (entry) =>
-          entry.kind === item.kind &&
-          !entry.budgetItemId &&
-          item.categoryId !== null &&
-          entry.categoryId === item.categoryId,
-      )
-      .reduce((sum, entry) => sum + entry.amountCents, 0);
-
-    return { item, spentCents, dueDate: null, paid: false };
-  });
-}
-
-export function monthTotals(
-  items: BudgetItemRow[],
-  entries: EntryItem[],
-  month: string,
-): MonthTotals {
+export function monthTotals(entries: EntryItem[]): MonthTotals {
   let incomeCents = 0;
   let spentCents = 0;
   let expectedIncomeCents = 0;
@@ -77,15 +20,5 @@ export function monthTotals(
     } else if (entry.kind === "income") incomeCents += entry.amountCents;
     else spentCents += entry.amountCents;
   }
-  const budgetedCents = activeIn(outcomeItems(items), month).reduce(
-    (sum, item) => sum + item.amountCents,
-    0,
-  );
-  return {
-    incomeCents,
-    spentCents,
-    budgetedCents,
-    expectedIncomeCents,
-    expectedSpendCents,
-  };
+  return { incomeCents, spentCents, expectedIncomeCents, expectedSpendCents };
 }

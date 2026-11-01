@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, gte, isNotNull, isNull, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lte } from "drizzle-orm";
 import { db } from "@/db";
 import type {
   BudgetItem,
@@ -13,8 +13,7 @@ import {
   financeSettings,
   savingsGoal,
 } from "@/db/schema";
-import { activeIn, outcomeItems } from "@/lib/budget";
-import { addMonths, dueDateIn, monthBounds, monthOf } from "@/lib/money";
+import { monthBounds } from "@/lib/money";
 import { fillItemMonths } from "@/lib/money-items";
 import type {
   BudgetItemRow,
@@ -45,7 +44,6 @@ export function serializeEntry(row: FinanceEntry): EntryItem {
     kind: row.kind,
     amountCents: row.amountCents,
     categoryId: row.categoryId,
-    budgetItemId: row.budgetItemId,
     moneyItemId: row.moneyItemId,
     date: row.date,
     note: row.note,
@@ -56,12 +54,12 @@ export function serializeEntry(row: FinanceEntry): EntryItem {
 export function serializeBudgetItem(row: BudgetItem): BudgetItemRow {
   return {
     id: row.id,
+    month: row.month,
     kind: row.kind,
     name: row.name,
     categoryId: row.categoryId,
     amountCents: row.amountCents,
-    dueDay: row.dueDay,
-    startDate: row.startDate,
+    moneyItemId: row.moneyItemId,
   };
 }
 
@@ -94,83 +92,6 @@ export async function ensureFinanceSetup(userId: string): Promise<void> {
   }
 }
 
-/** Due dates of a bill after `after` (exclusive) up to `through` (inclusive). */
-export function dueDatesBetween(
-  item: Pick<BudgetItem, "dueDay" | "startDate">,
-  after: string | null,
-  through: string,
-): string[] {
-  if (!item.dueDay) return [];
-  const from = after && after > item.startDate ? after : item.startDate;
-  const dates: string[] = [];
-  const last = monthOf(through);
-
-  for (let month = monthOf(from); month <= last; month = addMonths(month, 1)) {
-    const due = dueDateIn(month, item.dueDay);
-    if (due >= item.startDate && due <= through && (!after || due > after)) {
-      dates.push(due);
-    }
-  }
-
-  return dates;
-}
-
-/** Posts every bill that has come due since it last ran, at most once per month. */
-export async function postDueBills(userId: string, today: string) {
-  const bills = await db
-    .select()
-    .from(budgetItem)
-    .where(and(eq(budgetItem.userId, userId), isNotNull(budgetItem.dueDay)));
-
-  for (const bill of bills) {
-    if (bill.postedThrough && bill.postedThrough >= today) continue;
-    const dates = dueDatesBetween(bill, bill.postedThrough, today);
-
-    await db.transaction(async (tx) => {
-      const [claimed] = await tx
-        .update(budgetItem)
-        .set({ postedThrough: today })
-        .where(
-          and(
-            eq(budgetItem.id, bill.id),
-            bill.postedThrough
-              ? eq(budgetItem.postedThrough, bill.postedThrough)
-              : isNull(budgetItem.postedThrough),
-          ),
-        )
-        .returning({ id: budgetItem.id });
-
-      if (!claimed || !dates.length) return;
-
-      const existing = await tx
-        .select({ date: financeEntry.date })
-        .from(financeEntry)
-        .where(
-          and(
-            eq(financeEntry.budgetItemId, bill.id),
-            gte(financeEntry.date, monthBounds(monthOf(dates[0])).start),
-          ),
-        );
-      const postedMonths = new Set(existing.map((row) => monthOf(row.date)));
-      const pending = dates.filter((date) => !postedMonths.has(monthOf(date)));
-
-      if (pending.length) {
-        await tx.insert(financeEntry).values(
-          pending.map((date) => ({
-            userId,
-            kind: "expense" as const,
-            amountCents: bill.amountCents,
-            categoryId: bill.categoryId,
-            budgetItemId: bill.id,
-            date,
-            note: bill.name,
-          })),
-        );
-      }
-    });
-  }
-}
-
 export async function getCategories(userId: string): Promise<CategoryItem[]> {
   const rows = await db
     .select()
@@ -199,11 +120,14 @@ export async function getMonthEntries(
   return rows.map(serializeEntry);
 }
 
-export async function getBudgetItems(userId: string): Promise<BudgetItemRow[]> {
+export async function getBudgetItems(
+  userId: string,
+  month: string,
+): Promise<BudgetItemRow[]> {
   const rows = await db
     .select()
     .from(budgetItem)
-    .where(eq(budgetItem.userId, userId))
+    .where(and(eq(budgetItem.userId, userId), eq(budgetItem.month, month)))
     .orderBy(asc(budgetItem.createdAt));
   return rows.map(serializeBudgetItem);
 }
@@ -232,7 +156,6 @@ export async function getYearSummary(
   today: string,
 ): Promise<MonthSummary[]> {
   await ensureFinanceSetup(userId);
-  await postDueBills(userId, today);
   await fillItemMonths(userId, today);
   const rows = await db
     .select()
@@ -258,47 +181,47 @@ export async function getYearSummary(
   return months;
 }
 
-export type BudgetMonthSummary = {
-  month: string;
-  plannedCents: number;
-  spentCents: number;
-};
-
-/** Budget planned and settled spending per month of `year`; expected entries are left out. */
+/** Planned income and outcome per month of `year`, from the month budgets. */
 export async function getBudgetYearSummary(
   userId: string,
   year: number,
-  today: string,
-): Promise<BudgetMonthSummary[]> {
-  const [summary, items] = await Promise.all([
-    getYearSummary(userId, year, today),
-    getBudgetItems(userId),
-  ]);
-  return summary.map((item) => ({
-    month: item.month,
-    plannedCents: activeIn(outcomeItems(items), item.month).reduce(
-      (sum, row) => sum + row.amountCents,
-      0,
-    ),
-    spentCents: item.outcomeCents,
+): Promise<MonthSummary[]> {
+  const rows = await db
+    .select()
+    .from(budgetItem)
+    .where(
+      and(
+        eq(budgetItem.userId, userId),
+        gte(budgetItem.month, `${year}-01`),
+        lte(budgetItem.month, `${year}-12`),
+      ),
+    );
+  const months = Array.from({ length: 12 }, (_, index) => ({
+    month: `${year}-${String(index + 1).padStart(2, "0")}`,
+    incomeCents: 0,
+    outcomeCents: 0,
   }));
+  for (const row of rows) {
+    const summary = months[Number(row.month.slice(5, 7)) - 1];
+    if (row.kind === "income") summary.incomeCents += row.amountCents;
+    else summary.outcomeCents += row.amountCents;
+  }
+  return months;
 }
 
-/** Everything a month view needs, after posting bills that came due. */
+/** Everything a month view needs, after filling In/Out item copies. */
 export async function getFinanceMonth(
   userId: string,
   month: string,
   today: string,
 ) {
   await ensureFinanceSetup(userId);
-  await postDueBills(userId, today);
   await fillItemMonths(userId, today);
-  const [categories, entries, budget] = await Promise.all([
+  const [categories, entries] = await Promise.all([
     getCategories(userId),
     getMonthEntries(userId, month),
-    getBudgetItems(userId),
   ]);
-  return { categories, entries, budget };
+  return { categories, entries };
 }
 
 export async function ownsCategory(

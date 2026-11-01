@@ -4,8 +4,14 @@ import { redirect } from "next/navigation";
 import { BudgetView } from "@/components/finance/budget-view";
 import { FinanceHeader } from "@/components/finance/finance-bits";
 import { MonthCards } from "@/components/finance/month-cards";
-import { getBudgetYearSummary, getFinanceMonth } from "@/lib/finance";
+import {
+  ensureFinanceSetup,
+  getBudgetItems,
+  getBudgetYearSummary,
+  getCategories,
+} from "@/lib/finance";
 import { formatMoney, formatMonth, isMonthKey, monthOf } from "@/lib/money";
+import { getMoneyItems } from "@/lib/money-items";
 import { getSession } from "@/lib/session";
 import { getTimeZone, todayIn } from "@/lib/timezone";
 import { cn } from "@/lib/utils";
@@ -23,11 +29,12 @@ export default async function BudgetPage({
     redirect("/sign-in");
   }
 
+  const userId = session.user.id;
   const today = todayIn(await getTimeZone());
   const requested = (await searchParams).month;
 
   if (!isMonthKey(requested)) {
-    const months = await getBudgetYearSummary(session.user.id, year, today);
+    const months = await getBudgetYearSummary(userId, year);
     return (
       <div className="space-y-6">
         <FinanceHeader title="Budget" />
@@ -35,16 +42,20 @@ export default async function BudgetPage({
           path="/finance/budget"
           current={monthOf(today)}
           months={months.map((item) => {
-            const left = item.plannedCents - item.spentCents;
+            const remaining = item.incomeCents - item.outcomeCents;
             return {
               month: item.month,
               rows: [
-                { label: "Planned", value: formatMoney(item.plannedCents) },
-                { label: "Spent", value: formatMoney(item.spentCents) },
+                { label: "Income", value: formatMoney(item.incomeCents) },
+                { label: "Outcome", value: formatMoney(item.outcomeCents) },
                 {
-                  label: "Left",
-                  value: formatMoney(left),
-                  className: cn("font-medium", left < 0 && "text-destructive"),
+                  label: "Remaining",
+                  value: formatMoney(remaining),
+                  className: cn(
+                    "font-medium",
+                    remaining > 0 && "text-success",
+                    remaining < 0 && "text-destructive",
+                  ),
                 },
               ],
             };
@@ -55,7 +66,12 @@ export default async function BudgetPage({
   }
 
   const month = requested;
-  const data = await getFinanceMonth(session.user.id, month, today);
+  await ensureFinanceSetup(userId);
+  const [categories, items, moneyItems] = await Promise.all([
+    getCategories(userId),
+    getBudgetItems(userId, month),
+    getMoneyItems(userId),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -72,10 +88,9 @@ export default async function BudgetPage({
       <BudgetView
         key={month}
         month={month}
-        today={today}
-        categories={data.categories}
-        initialItems={data.budget}
-        initialEntries={data.entries}
+        categories={categories}
+        moneyItems={moneyItems}
+        initialItems={items}
       />
     </div>
   );

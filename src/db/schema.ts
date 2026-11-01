@@ -421,8 +421,8 @@ export const financeCategory = pgTable(
   (t) => [index("finance_category_user_id_idx").on(t.userId)],
 );
 
-/** A monthly budget line: a fixed bill when `dueDay` is set, otherwise a spending limit. */
-export const budgetItem = pgTable(
+/** Legacy Bills/Limits table, no longer used by the app; kept so existing rows and deploys stay intact. */
+export const legacyBudgetItem = pgTable(
   "budget_item",
   {
     id: uuid("id").primaryKey().defaultRandom(),
@@ -485,8 +485,8 @@ export const financeEntry = pgTable(
     categoryId: uuid("category_id").references(() => financeCategory.id, {
       onDelete: "set null",
     }),
-    /** Set when the entry was posted automatically by a budget bill. */
-    budgetItemId: uuid("budget_item_id").references(() => budgetItem.id, {
+    /** Legacy: set on entries posted by an old Bills/Limits bill. */
+    budgetItemId: uuid("budget_item_id").references(() => legacyBudgetItem.id, {
       onDelete: "set null",
     }),
     /** Set when the entry is a month's copy of an In/Out item. */
@@ -505,6 +505,31 @@ export const financeEntry = pgTable(
     index("finance_entry_budget_item_idx").on(t.budgetItemId),
     index("finance_entry_money_item_idx").on(t.moneyItemId),
   ],
+);
+
+/** One planned income or outcome in a month's budget; `moneyItemId` is set when picked from an In/Out item. */
+export const budgetItem = pgTable(
+  "budget_plan_item",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    /** `YYYY-MM` */
+    month: text("month").notNull(),
+    kind: entryKind("kind").notNull(),
+    name: text("name").notNull(),
+    categoryId: uuid("category_id").references(() => financeCategory.id, {
+      onDelete: "set null",
+    }),
+    amountCents: integer("amount_cents").notNull(),
+    moneyItemId: uuid("money_item_id").references(() => moneyItem.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("budget_plan_item_user_month_idx").on(t.userId, t.month)],
 );
 
 export const savingsGoal = pgTable(
