@@ -5,9 +5,10 @@ import { FinanceHeader } from "@/components/finance/finance-bits";
 import { FinanceOverview } from "@/components/finance/finance-overview";
 import { MonthCards } from "@/components/finance/month-cards";
 import { getFinanceMonth, getYearSummary } from "@/lib/finance";
-import { formatMonth, isMonthKey, monthOf } from "@/lib/money";
+import { formatMoney, formatMonth, isMonthKey, monthOf } from "@/lib/money";
 import { getSession } from "@/lib/session";
 import { getTimeZone, todayIn } from "@/lib/timezone";
+import { cn } from "@/lib/utils";
 
 const year = 2026;
 
@@ -30,7 +31,25 @@ export default async function FinancePage({
     return (
       <div className="space-y-6">
         <FinanceHeader title="Income and Outcomes" />
-        <MonthCards months={months} current={monthOf(today)} />
+        <MonthCards
+          path="/finance"
+          current={monthOf(today)}
+          months={months.map((item) => {
+            const left = item.incomeCents - item.outcomeCents;
+            return {
+              month: item.month,
+              rows: [
+                { label: "Income", value: formatMoney(item.incomeCents) },
+                { label: "Outcome", value: formatMoney(item.outcomeCents) },
+                {
+                  label: "Left",
+                  value: formatMoney(left),
+                  className: cn("font-medium", left < 0 && "text-destructive"),
+                },
+              ],
+            };
+          })}
+        />
       </div>
     );
   }

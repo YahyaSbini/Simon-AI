@@ -1,76 +1,12 @@
 "use client";
 
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { addMonths, formatMonth } from "@/lib/money";
 import { cn } from "@/lib/utils";
 
-export function FinanceHeader({
-  title,
-  month,
-  current,
-  path,
-}: {
-  title: string;
-  month?: string;
-  current?: string;
-  path?: string;
-}) {
+export function FinanceHeader({ title }: { title: string }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-3">
       <h1 className="font-heading text-3xl">{title}</h1>
-      {month && current && path ? (
-        <MonthSwitcher month={month} current={current} path={path} />
-      ) : null}
     </header>
-  );
-}
-
-function MonthSwitcher({
-  month,
-  current,
-  path,
-}: {
-  month: string;
-  current: string;
-  path: string;
-}) {
-  const href = (target: string) =>
-    target === current ? path : `${path}?month=${target}`;
-
-  return (
-    <nav aria-label="Month" className="flex items-center gap-1">
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Previous month"
-        render={<Link href={href(addMonths(month, -1))} />}
-      >
-        <ChevronLeft />
-      </Button>
-      <span className="min-w-32 text-center text-sm font-medium tabular-nums">
-        {formatMonth(month)}
-      </span>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Next month"
-        render={<Link href={href(addMonths(month, 1))} />}
-      >
-        <ChevronRight />
-      </Button>
-      {month !== current ? (
-        <Button
-          variant="ghost"
-          size="xs"
-          className="text-muted-foreground"
-          render={<Link href={path} />}
-        >
-          This month
-        </Button>
-      ) : null}
-    </nav>
   );
 }
 
