@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  ArrowRight,
   Check,
   CircleCheck,
   Pencil,
@@ -10,10 +9,9 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Meter, Segmented, sendJson } from "@/components/finance/finance-bits";
+import { Segmented, sendJson } from "@/components/finance/finance-bits";
 import { selectClass } from "@/components/task-detail";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -28,7 +26,7 @@ import {
   parseAmount,
   toAmountInput,
 } from "@/lib/money";
-import type { BudgetItemRow, CategoryItem, EntryItem } from "@/lib/types";
+import type { CategoryItem, EntryItem } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type Kind = EntryItem["kind"];
@@ -51,19 +49,17 @@ export function FinanceOverview({
   month,
   today,
   categories,
-  budget,
   initialEntries,
 }: {
   month: string;
   today: string;
   categories: CategoryItem[];
-  budget: BudgetItemRow[];
   initialEntries: EntryItem[];
 }) {
   const [entries, setEntries] = useState(initialEntries);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const totals = monthTotals(budget, entries, month);
+  const totals = monthTotals(entries);
   const left = totals.incomeCents - totals.spentCents;
   const hasExpected =
     totals.expectedIncomeCents > 0 || totals.expectedSpendCents > 0;
@@ -204,31 +200,6 @@ export function FinanceOverview({
               .join(" · ")}
           </p>
         ) : null}
-
-        {totals.budgetedCents > 0 ? (
-          <Link
-            href={`/finance/budget?month=${month}`}
-            className="group focus-visible:ring-ring -mx-2 block space-y-2 rounded-lg px-2 py-2 outline-none hover:bg-muted/50 focus-visible:ring-2"
-          >
-            <div className="flex items-baseline justify-between gap-3 text-sm">
-              <span className="text-muted-foreground">
-                <span className="text-foreground font-medium tabular-nums">
-                  {money(totals.spentCents)}
-                </span>{" "}
-                of {money(totals.budgetedCents)} budget
-              </span>
-              <span className="text-azure flex items-center gap-1 text-sm font-medium">
-                Budget
-                <ArrowRight className="size-4 transition-transform group-hover:translate-x-0.5" />
-              </span>
-            </div>
-            <Meter
-              value={totals.spentCents}
-              max={totals.budgetedCents}
-              label="Spent against budget"
-            />
-          </Link>
-        ) : null}
       </section>
 
       <section className="space-y-4">
@@ -303,14 +274,10 @@ export function FinanceOverview({
                               ? (categoryName.get(entry.categoryId) ??
                                 "Uncategorized")
                               : "Uncategorized"}
-                            {entry.budgetItemId || entry.moneyItemId ? (
+                            {entry.moneyItemId ? (
                               <Repeat
                                 className="text-muted-foreground size-3.5 shrink-0"
-                                aria-label={
-                                  entry.budgetItemId
-                                    ? "Posted by a budget bill"
-                                    : "From an In/Out item"
-                                }
+                                aria-label="From an In/Out item"
                               />
                             ) : null}
                             {entry.expected ? (

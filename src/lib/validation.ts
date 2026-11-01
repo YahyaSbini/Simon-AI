@@ -151,12 +151,22 @@ export const categoryInput = z.object({
 });
 
 export const budgetItemInput = z.object({
-  kind: entryKind.default("expense"),
+  month: z.string().refine(isMonthKey),
+  kind: entryKind,
   name: z.string().trim().min(1).max(80),
   amountCents: cents,
   categoryId: z.string().uuid().nullish(),
-  dueDay: z.number().int().min(1).max(31).nullish(),
 });
+
+/** Copies In/Out items into a month's budget. */
+export const budgetPickInput = z.object({
+  month: z.string().refine(isMonthKey),
+  moneyItemIds: z.array(z.string().uuid()).min(1).max(200),
+});
+
+export const budgetItemUpdate = budgetItemInput
+  .pick({ name: true, amountCents: true, categoryId: true })
+  .partial();
 
 export const moneyItemInput = z.object({
   kind: entryKind,

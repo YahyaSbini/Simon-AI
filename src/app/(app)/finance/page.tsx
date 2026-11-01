@@ -74,7 +74,6 @@ export default async function FinancePage({
         month={month}
         today={today}
         categories={data.categories}
-        budget={data.budget}
         initialEntries={data.entries}
       />
     </div>

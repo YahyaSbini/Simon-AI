@@ -1,27 +1,12 @@
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { db } from "@/db";
-import { budgetItem, financeEntry } from "@/db/schema";
-import {
-  ownsCategory,
-  postDueBills,
-  serializeBudgetItem,
-  serializeEntry,
-} from "@/lib/finance";
+import { budgetItem } from "@/db/schema";
+import { ownsCategory, serializeBudgetItem } from "@/lib/finance";
 import { requireUserId } from "@/lib/session";
-import { getTimeZone, todayIn } from "@/lib/timezone";
-import { budgetItemInput } from "@/lib/validation";
-
-/** An item stays in its Income or Outcome column once created. */
-const updateSchema = budgetItemInput.omit({ kind: true }).partial();
+import { budgetItemUpdate } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
-
-function dayBefore(date: string): string {
-  const value = new Date(`${date}T00:00:00Z`);
-  value.setUTCDate(value.getUTCDate() - 1);
-  return value.toISOString().slice(0, 10);
-}
 
 export async function PATCH(request: Request, { params }: RouteContext) {
   const userId = await requireUserId();
@@ -30,7 +15,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const parsed = updateSchema.safeParse(await request.json());
+  const parsed = budgetItemUpdate.safeParse(await request.json());
 
   if (
     !parsed.success ||
@@ -43,50 +28,17 @@ export async function PATCH(request: Request, { params }: RouteContext) {
   }
 
   const { id } = await params;
-  const [current] = await db
-    .select()
-    .from(budgetItem)
-    .where(and(eq(budgetItem.id, id), eq(budgetItem.userId, userId)));
+  const [updated] = await db
+    .update(budgetItem)
+    .set({ ...parsed.data, updatedAt: new Date() })
+    .where(and(eq(budgetItem.id, id), eq(budgetItem.userId, userId)))
+    .returning();
 
-  if (!current) {
+  if (!updated) {
     return NextResponse.json({ error: "Item not found." }, { status: 404 });
   }
 
-  const today = todayIn(await getTimeZone());
-  if (current.kind === "income") parsed.data.dueDay = null;
-  const rescheduled =
-    parsed.data.dueDay !== undefined && parsed.data.dueDay !== current.dueDay;
-  const resumeFrom = dayBefore(today);
-  const [updated] = await db
-    .update(budgetItem)
-    .set({
-      ...parsed.data,
-      ...(rescheduled &&
-      (!current.postedThrough || current.postedThrough < resumeFrom)
-        ? { postedThrough: resumeFrom }
-        : {}),
-      updatedAt: new Date(),
-    })
-    .where(eq(budgetItem.id, id))
-    .returning();
-
-  if (rescheduled) await postDueBills(userId, today);
-  const posted = rescheduled
-    ? await db
-        .select()
-        .from(financeEntry)
-        .where(
-          and(
-            eq(financeEntry.budgetItemId, id),
-            gt(financeEntry.date, resumeFrom),
-          ),
-        )
-    : [];
-
-  return NextResponse.json({
-    item: serializeBudgetItem(updated),
-    posted: posted.map(serializeEntry),
-  });
+  return NextResponse.json({ item: serializeBudgetItem(updated) });
 }
 
 export async function DELETE(_request: Request, { params }: RouteContext) {

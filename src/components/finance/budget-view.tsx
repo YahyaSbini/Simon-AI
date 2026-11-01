@@ -1,98 +1,70 @@
 "use client";
 
-import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
+import {
+  Check,
+  ListChecks,
+  Pencil,
+  Plus,
+  Repeat,
+  Trash2,
+  X,
+} from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Meter, Segmented, sendJson } from "@/components/finance/finance-bits";
+import { sendJson } from "@/components/finance/finance-bits";
 import { selectClass } from "@/components/task-detail";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { type BudgetLine, budgetLines } from "@/lib/budget";
-import {
-  addMonths,
-  dueDateIn,
-  formatMoney,
-  formatMonth,
-  formatShortDate,
-  monthOf,
-  ordinal,
-  parseAmount,
-  toAmountInput,
-} from "@/lib/money";
-import type { BudgetItemRow, CategoryItem, EntryItem } from "@/lib/types";
+import { formatMoney, parseAmount, toAmountInput } from "@/lib/money";
+import type { EntryKind } from "@/db/schema";
+import type { BudgetItemRow, CategoryItem, MoneyItemRow } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-type Kind = BudgetItemRow["kind"];
-type ItemType = "bill" | "limit";
+type Draft = { name: string; amount: string; categoryId: string };
 
-type Draft = {
-  type: ItemType;
-  name: string;
-  amount: string;
-  categoryId: string;
-  dueDay: string;
-};
+type Panel = { kind: EntryKind; mode: "pick" | "manual" } | null;
 
-const typeOptions: { value: ItemType; label: string }[] = [
-  { value: "bill", label: "Bill" },
-  { value: "limit", label: "Limit" },
-];
-
-const emptyDraft: Draft = {
-  type: "bill",
-  name: "",
-  amount: "",
-  categoryId: "",
-  dueDay: "1",
-};
-
-type Saved = { item: BudgetItemRow; posted: EntryItem[] };
+const emptyDraft: Draft = { name: "", amount: "", categoryId: "" };
 
 export function BudgetView({
   month,
-  today,
   categories,
+  moneyItems,
   initialItems,
-  initialEntries,
 }: {
   month: string;
-  today: string;
   categories: CategoryItem[];
+  moneyItems: MoneyItemRow[];
   initialItems: BudgetItemRow[];
-  initialEntries: EntryItem[];
 }) {
   const [items, setItems] = useState(initialItems);
-  const [entries, setEntries] = useState(initialEntries);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [adding, setAdding] = useState<Kind | null>(null);
+  const [panel, setPanel] = useState<Panel>(null);
   const [saving, setSaving] = useState(false);
   const categoryName = useMemo(
     () => new Map(categories.map((item) => [item.id, item.name])),
     [categories],
   );
-  const lines = budgetLines(items, entries, month);
-  const settled = entries.filter((entry) => !entry.expected);
-  const money = (cents: number) => formatMoney(cents);
 
   const columns = (["income", "expense"] as const).map((kind) => {
-    const mine = lines.filter((line) => line.item.kind === kind);
+    const mine = items.filter((item) => item.kind === kind);
     return {
       kind,
       label: kind === "income" ? "Income" : "Outcome",
-      lines: mine,
+      items: mine,
+      sources: moneyItems.filter((item) => item.kind === kind),
       categories: categories.filter((item) => item.kind === kind),
-      planned: mine.reduce((sum, line) => sum + line.item.amountCents, 0),
-      actual: settled
-        .filter((entry) => entry.kind === kind)
-        .reduce((sum, entry) => sum + entry.amountCents, 0),
+      total: mine.reduce((sum, item) => sum + item.amountCents, 0),
     };
   });
+  const [income, outcome] = columns.map((column) => column.total);
+  const remaining = income - outcome;
 
-  function toPayload(kind: Kind, draft: Draft) {
+  function toPayload(draft: Draft) {
     const name = draft.name.trim();
     const amountCents = parseAmount(draft.amount);
-    const dueDay = Number(draft.dueDay);
-    const bill = kind === "expense" && draft.type === "bill";
     if (!name) {
       toast.error("Give the item a name.");
       return null;
@@ -101,72 +73,51 @@ export function BudgetView({
       toast.error("Enter an amount above zero.");
       return null;
     }
-    if (bill && !(dueDay >= 1 && dueDay <= 31)) {
-      toast.error("Pick the day of the month it's paid, 1 to 31.");
-      return null;
-    }
-    if (!bill && !draft.categoryId) {
-      toast.error(
-        kind === "income"
-          ? "Income is counted by category. Pick one."
-          : "A limit tracks a category. Pick one.",
-      );
-      return null;
-    }
-    return {
-      name,
-      amountCents,
-      categoryId: draft.categoryId || null,
-      dueDay: bill ? dueDay : null,
-    };
+    return { name, amountCents, categoryId: draft.categoryId || null };
   }
 
-  function mergePosted(posted: EntryItem[]) {
-    const mine = posted.filter((entry) => monthOf(entry.date) === month);
-    if (!mine.length) return;
-    setEntries((current) => [
-      ...current.filter((entry) => !mine.some((item) => item.id === entry.id)),
-      ...mine,
-    ]);
-  }
-
-  async function createItem(kind: Kind, draft: Draft) {
-    const payload = toPayload(kind, draft);
-    if (!payload) return false;
+  async function post(body: object) {
     setSaving(true);
-    const result = await sendJson<Saved>("/api/finance/budget-items", "POST", {
-      ...payload,
-      kind,
-    });
+    const result = await sendJson<{ items: BudgetItemRow[] }>(
+      "/api/finance/budget-items",
+      "POST",
+      body,
+    );
     setSaving(false);
     if (!result) {
-      toast.error("Couldn't add that budget item.");
+      toast.error("Couldn't add to this budget.");
       return false;
     }
-    setItems((current) => [...current, result.item]);
-    mergePosted(result.posted);
-    if (result.posted.length) {
-      toast.success(`${result.item.name} posted as today's outcome.`);
-    }
+    setItems((current) => [...current, ...result.items]);
     return true;
   }
 
-  async function updateItem(item: BudgetItemRow, draft: Draft) {
-    const payload = toPayload(item.kind, draft);
+  async function addManual(kind: EntryKind, draft: Draft) {
+    const payload = toPayload(draft);
     if (!payload) return false;
-    const result = await sendJson<Saved>(
+    return post({ ...payload, kind, month });
+  }
+
+  async function addPicked(moneyItemIds: string[]) {
+    if (!moneyItemIds.length) return;
+    if (await post({ month, moneyItemIds })) setPanel(null);
+  }
+
+  async function updateItem(item: BudgetItemRow, draft: Draft) {
+    const payload = toPayload(draft);
+    if (!payload) return false;
+    const result = await sendJson<{ item: BudgetItemRow }>(
       `/api/finance/budget-items/${item.id}`,
       "PATCH",
       payload,
     );
     if (!result) {
-      toast.error("Couldn't save that budget item.");
+      toast.error("Couldn't save that item.");
       return false;
     }
     setItems((current) =>
       current.map((row) => (row.id === item.id ? result.item : row)),
     );
-    mergePosted(result.posted);
     setEditingId(null);
     return true;
   }
@@ -179,39 +130,12 @@ export function BudgetView({
       "DELETE",
     );
     if (!result) {
-      toast.error("Couldn't remove that budget item.");
+      toast.error("Couldn't remove that item.");
       setItems(previous);
     }
   }
 
-  function status(line: BudgetLine): string {
-    const { item } = line;
-    if (item.kind === "income") return "received";
-    if (!item.dueDay) return "spent";
-    if (line.paid) return "paid";
-    if (!line.dueDate) {
-      return `starts ${formatShortDate(dueDateIn(addMonths(month, 1), item.dueDay))}`;
-    }
-    if (line.dueDate >= today) return `due ${formatShortDate(line.dueDate)}`;
-    return "not posted";
-  }
-
-  function remainder(line: BudgetLine) {
-    const { item, spentCents } = line;
-    const diff = item.amountCents - spentCents;
-    if (item.kind === "income") {
-      return diff >= 0
-        ? { text: `${money(diff)} to receive`, over: false }
-        : { text: `${money(-diff)} above plan`, over: false };
-    }
-    if (item.dueDay) return null;
-    return diff >= 0
-      ? { text: `${money(diff)} left`, over: false }
-      : { text: `${money(-diff)} over`, over: true };
-  }
-
-  function renderBox(line: BudgetLine, kindCategories: CategoryItem[]) {
-    const { item } = line;
+  function renderBox(item: BudgetItemRow, kindCategories: CategoryItem[]) {
     if (editingId === item.id) {
       return (
         <li
@@ -219,15 +143,13 @@ export function BudgetView({
           className="border-border bg-card rounded-xl border p-3 sm:col-span-2"
         >
           <ItemForm
-            kind={item.kind}
             initial={{
-              type: item.dueDay ? "bill" : "limit",
               name: item.name,
               amount: toAmountInput(item.amountCents),
               categoryId: item.categoryId ?? "",
-              dueDay: item.dueDay ? String(item.dueDay) : "",
             }}
             categories={kindCategories}
+            submitLabel="Save"
             onSubmit={(draft) => updateItem(item, draft)}
             onCancel={() => setEditingId(null)}
           />
@@ -235,28 +157,28 @@ export function BudgetView({
       );
     }
 
-    const rest = remainder(line);
-    const showActual = !item.dueDay || line.paid;
-    const detail = [
-      item.categoryId ? categoryName.get(item.categoryId) : null,
-      item.dueDay ? `Posts on the ${ordinal(item.dueDay)}` : null,
-    ]
-      .filter(Boolean)
-      .join(" · ");
+    const category = item.categoryId ? categoryName.get(item.categoryId) : null;
 
     return (
       <li
         key={item.id}
-        className={cn(
-          "group/row border-border bg-card flex flex-col gap-3 rounded-xl border p-4 transition-colors",
-          rest?.over && "border-destructive/50",
-        )}
+        className="group/row border-border bg-card flex flex-col gap-3 rounded-xl border p-4"
       >
         <div className="flex items-start gap-2">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium">{item.name}</p>
-            {detail ? (
-              <p className="text-muted-foreground truncate text-sm">{detail}</p>
+            <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+              {item.name}
+              {item.moneyItemId ? (
+                <Repeat
+                  className="text-muted-foreground size-3.5 shrink-0"
+                  aria-label="From In/Out Items"
+                />
+              ) : null}
+            </p>
+            {category ? (
+              <p className="text-muted-foreground truncate text-sm">
+                {category}
+              </p>
             ) : null}
           </div>
           <span className="-mt-1 -mr-2 flex shrink-0 items-center opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 max-md:opacity-100">
@@ -281,129 +203,211 @@ export function BudgetView({
             </Button>
           </span>
         </div>
-        <div className="mt-auto space-y-2">
-          <p className="text-sm tabular-nums">
-            <span
-              className={cn(
-                "font-heading text-xl",
-                rest?.over && "text-destructive",
-              )}
-            >
-              {money(showActual ? line.spentCents : item.amountCents)}
-            </span>{" "}
-            <span className="text-muted-foreground">
-              {showActual
-                ? `${status(line)} of ${money(item.amountCents)}`
-                : status(line)}
-            </span>
-          </p>
-          {!item.dueDay ? (
-            <Meter
-              value={line.spentCents}
-              max={item.amountCents}
-              label={`${item.name} ${status(line)}`}
-            />
-          ) : null}
-          {rest ? (
-            <p
-              className={cn(
-                "text-sm tabular-nums",
-                rest.over
-                  ? "text-destructive font-medium"
-                  : "text-muted-foreground",
-              )}
-            >
-              {rest.text}
-            </p>
-          ) : null}
-        </div>
+        <p className="font-heading mt-auto text-xl tabular-nums">
+          {formatMoney(item.amountCents)}
+        </p>
       </li>
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
+      <dl className="border-border bg-card divide-border grid divide-y rounded-xl border sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+        <Figure label="Income" value={formatMoney(income)} />
+        <Figure label="Outcome" value={formatMoney(outcome)} />
+        <Figure
+          label="Remaining"
+          value={formatMoney(remaining)}
+          className={cn(
+            remaining > 0 && "text-success",
+            remaining < 0 && "text-destructive",
+          )}
+        />
+      </dl>
+
       <div className="grid gap-8 lg:grid-cols-2">
-        {columns.map((column) => (
-          <section key={column.kind} className="min-w-0 space-y-3">
-            <div className="space-y-2">
+        {columns.map((column) => {
+          const open = panel?.kind === column.kind ? panel.mode : null;
+          return (
+            <section key={column.kind} className="min-w-0 space-y-3">
               <h2 className="text-muted-foreground flex items-baseline justify-between gap-3 text-xs tracking-wide uppercase">
                 {column.label}
-                <span className="tabular-nums normal-case">
-                  {money(column.actual)} of {money(column.planned)}
+                <span className="tabular-nums">
+                  {formatMoney(column.total)}
                 </span>
               </h2>
-              <Meter
-                value={column.actual}
-                max={column.planned}
-                label={`${column.label} against budget`}
-              />
-            </div>
 
-            {column.lines.length ? (
-              <ul className="grid gap-3 sm:grid-cols-2">
-                {column.lines.map((line) => renderBox(line, column.categories))}
-              </ul>
-            ) : (
-              <p className="text-muted-foreground border-border rounded-xl border border-dashed px-4 py-6 text-center text-sm">
-                {column.kind === "income"
-                  ? "Plan what you expect to receive, like Salary. Income in that category counts toward it."
-                  : "Bills post themselves on their day. Limits cap a category, like Groceries."}
-              </p>
-            )}
+              {column.items.length ? (
+                <ul className="grid gap-3 sm:grid-cols-2">
+                  {column.items.map((item) =>
+                    renderBox(item, column.categories),
+                  )}
+                </ul>
+              ) : (
+                <p className="text-muted-foreground border-border rounded-xl border border-dashed px-4 py-6 text-center text-sm">
+                  No {column.label.toLowerCase()} planned yet.
+                </p>
+              )}
 
-            {adding === column.kind ? (
-              <div className="border-border bg-card rounded-xl border p-3">
-                <ItemForm
-                  kind={column.kind}
-                  initial={emptyDraft}
-                  categories={column.categories}
+              {open === "pick" ? (
+                <PickPanel
+                  sources={column.sources}
+                  added={
+                    new Set(column.items.map((item) => item.moneyItemId ?? ""))
+                  }
                   saving={saving}
-                  onSubmit={(draft) => createItem(column.kind, draft)}
-                  onCancel={() => setAdding(null)}
+                  onAdd={addPicked}
+                  onCancel={() => setPanel(null)}
                 />
-              </div>
-            ) : (
-              <Button
-                type="button"
-                variant="ghost"
-                className="text-muted-foreground"
-                onClick={() => setAdding(column.kind)}
-              >
-                <Plus data-icon="inline-start" />
-                Add {column.label.toLowerCase()}
-              </Button>
-            )}
-          </section>
-        ))}
+              ) : open === "manual" ? (
+                <div className="border-border bg-card rounded-xl border p-3">
+                  <ItemForm
+                    initial={emptyDraft}
+                    categories={column.categories}
+                    placeholder={
+                      column.kind === "income" ? "e.g. Salary" : "e.g. Rent"
+                    }
+                    submitLabel={`Add ${column.label.toLowerCase()}`}
+                    saving={saving}
+                    onSubmit={(draft) => addManual(column.kind, draft)}
+                    onCancel={() => setPanel(null)}
+                  />
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="text-muted-foreground"
+                    onClick={() =>
+                      setPanel({ kind: column.kind, mode: "pick" })
+                    }
+                  >
+                    <ListChecks data-icon="inline-start" />
+                    Add from items
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="text-muted-foreground"
+                    onClick={() =>
+                      setPanel({ kind: column.kind, mode: "manual" })
+                    }
+                  >
+                    <Plus data-icon="inline-start" />
+                    Add manually
+                  </Button>
+                </div>
+              )}
+            </section>
+          );
+        })}
       </div>
-      {month !== monthOf(today) ? (
-        <p className="text-muted-foreground text-sm">
-          New items start from today, not from {formatMonth(month)}.
+    </div>
+  );
+}
+
+function PickPanel({
+  sources,
+  added,
+  saving,
+  onAdd,
+  onCancel,
+}: {
+  sources: MoneyItemRow[];
+  added: Set<string>;
+  saving: boolean;
+  onAdd: (ids: string[]) => void;
+  onCancel: () => void;
+}) {
+  const [picked, setPicked] = useState<string[]>([]);
+
+  function toggle(id: string) {
+    setPicked((current) =>
+      current.includes(id)
+        ? current.filter((item) => item !== id)
+        : [...current, id],
+    );
+  }
+
+  return (
+    <div className="border-border bg-card space-y-3 rounded-xl border p-3">
+      {sources.length ? (
+        <ul className="space-y-1">
+          {sources.map((item) => {
+            const done = added.has(item.id);
+            const id = `pick-${item.id}`;
+            return (
+              <li key={item.id}>
+                <label
+                  htmlFor={id}
+                  className={cn(
+                    "flex min-h-11 items-center gap-3 rounded-md px-2 text-sm transition-colors",
+                    done
+                      ? "text-muted-foreground"
+                      : "hover:bg-muted/50 cursor-pointer",
+                  )}
+                >
+                  <Checkbox
+                    id={id}
+                    checked={done || picked.includes(item.id)}
+                    disabled={done}
+                    onCheckedChange={() => toggle(item.id)}
+                  />
+                  <span className="min-w-0 flex-1 truncate">{item.name}</span>
+                  <span className="tabular-nums">
+                    {formatMoney(item.amountCents)}
+                  </span>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <p className="text-muted-foreground px-2 py-2 text-sm">
+          Nothing here yet. Add items in{" "}
+          <Link href="/finance/items" className="text-azure hover:underline">
+            In/Out Items
+          </Link>
+          .
         </p>
-      ) : null}
+      )}
+      <div className="flex justify-end gap-1">
+        <Button type="button" variant="ghost" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button
+          type="button"
+          disabled={saving || !picked.length}
+          onClick={() => onAdd(picked)}
+        >
+          <Plus data-icon="inline-start" />
+          Add{picked.length ? ` ${picked.length}` : ""}
+        </Button>
+      </div>
     </div>
   );
 }
 
 function ItemForm({
-  kind,
   initial,
   categories,
+  placeholder,
+  submitLabel,
   saving = false,
   onSubmit,
   onCancel,
 }: {
-  kind: Kind;
   initial: Draft;
   categories: CategoryItem[];
+  placeholder?: string;
+  submitLabel: string;
   saving?: boolean;
   onSubmit: (draft: Draft) => Promise<boolean>;
   onCancel: () => void;
 }) {
   const [draft, setDraft] = useState<Draft>(initial);
   const editing = Boolean(initial.name);
-  const bill = kind === "expense" && draft.type === "bill";
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -413,24 +417,10 @@ function ItemForm({
 
   return (
     <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
-      {kind === "expense" ? (
-        <Segmented
-          label="Item type"
-          value={draft.type}
-          options={typeOptions}
-          onChange={(type) => setDraft({ ...draft, type })}
-        />
-      ) : null}
       <Input
         value={draft.name}
         onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-        placeholder={
-          kind === "income"
-            ? "e.g. Salary"
-            : bill
-              ? "e.g. Rent, Netflix"
-              : "e.g. Food"
-        }
+        placeholder={placeholder}
         aria-label="Name"
         maxLength={80}
         autoFocus
@@ -441,7 +431,7 @@ function ItemForm({
         onChange={(event) => setDraft({ ...draft, amount: event.target.value })}
         inputMode="decimal"
         placeholder="0.00"
-        aria-label="Monthly amount"
+        aria-label="Amount"
         className="w-28 tabular-nums"
       />
       <select
@@ -452,29 +442,13 @@ function ItemForm({
         aria-label="Category"
         className={cn(selectClass, "w-36")}
       >
-        <option value="">{bill ? "No category" : "Pick category"}</option>
+        <option value="">No category</option>
         {categories.map((item) => (
           <option key={item.id} value={item.id}>
             {item.name}
           </option>
         ))}
       </select>
-      {bill ? (
-        <label className="text-muted-foreground flex items-center gap-1.5 text-sm">
-          Day
-          <Input
-            type="number"
-            min={1}
-            max={31}
-            value={draft.dueDay}
-            onChange={(event) =>
-              setDraft({ ...draft, dueDay: event.target.value })
-            }
-            aria-label="Day of month"
-            className="w-16 tabular-nums"
-          />
-        </label>
-      ) : null}
       <div className="flex items-center gap-1">
         <Button
           type="button"
@@ -489,22 +463,44 @@ function ItemForm({
           type="submit"
           size={editing ? "icon" : "default"}
           disabled={saving}
-          aria-label={editing ? "Save" : undefined}
+          aria-label={editing ? submitLabel : undefined}
         >
           {editing ? (
             <Check />
           ) : (
             <>
               <Plus data-icon="inline-start" />
-              {kind === "income"
-                ? "Add income"
-                : bill
-                  ? "Add bill"
-                  : "Add limit"}
+              {submitLabel}
             </>
           )}
         </Button>
       </div>
     </form>
+  );
+}
+
+function Figure({
+  label,
+  value,
+  className,
+}: {
+  label: string;
+  value: string;
+  className?: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-baseline justify-between gap-3 px-4 py-3 sm:block sm:py-4">
+      <dt className="text-muted-foreground text-xs tracking-wide uppercase">
+        {label}
+      </dt>
+      <dd
+        className={cn(
+          "font-heading truncate text-lg tabular-nums sm:mt-1 sm:text-2xl",
+          className,
+        )}
+      >
+        {value}
+      </dd>
+    </div>
   );
 }

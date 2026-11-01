@@ -4,11 +4,7 @@ import { redirect } from "next/navigation";
 import { formatDay } from "@/lib/dates";
 import { getDayBlocks, getMyDayTasks, getRoutineOccurrences } from "@/lib/data";
 import { blocksOn, isoWeekday } from "@/lib/day-structure";
-import {
-  ensureFinanceSetup,
-  getMonthEntries,
-  postDueBills,
-} from "@/lib/finance";
+import { ensureFinanceSetup, getMonthEntries } from "@/lib/finance";
 import { formatMoney, monthOf } from "@/lib/money";
 import { getSession } from "@/lib/session";
 import { getTimeZone, todayIn } from "@/lib/timezone";
@@ -72,7 +68,6 @@ export default async function HomePage() {
 
 async function summarizeMoney(userId: string, date: string): Promise<string> {
   await ensureFinanceSetup(userId);
-  await postDueBills(userId, date);
   const entries = await getMonthEntries(userId, monthOf(date));
 
   if (!entries.length) return "Log income and expenses, set a monthly budget.";

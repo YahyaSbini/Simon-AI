@@ -56,7 +56,6 @@ export type EntryItem = {
   kind: EntryKind;
   amountCents: number;
   categoryId: string | null;
-  budgetItemId: string | null;
   moneyItemId: string | null;
   date: string;
   note: string | null;
@@ -76,12 +75,12 @@ export type MoneyItemRow = {
 
 export type BudgetItemRow = {
   id: string;
-  kind: "income" | "expense";
+  month: string;
+  kind: EntryKind;
   name: string;
   categoryId: string | null;
   amountCents: number;
-  dueDay: number | null;
-  startDate: string;
+  moneyItemId: string | null;
 };
 
 export type SavingsGoalItem = {
