@@ -307,10 +307,14 @@ export function FinanceOverview({
                               ? (categoryName.get(entry.categoryId) ??
                                 "Uncategorized")
                               : "Uncategorized"}
-                            {entry.budgetItemId ? (
+                            {entry.budgetItemId || entry.moneyItemId ? (
                               <Repeat
                                 className="text-muted-foreground size-3.5 shrink-0"
-                                aria-label="Posted by a budget bill"
+                                aria-label={
+                                  entry.budgetItemId
+                                    ? "Posted by a budget bill"
+                                    : "From an In/Out item"
+                                }
                               />
                             ) : null}
                             {entry.expected ? (

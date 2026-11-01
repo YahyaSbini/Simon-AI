@@ -445,6 +445,33 @@ export const budgetItem = pgTable(
   (t) => [index("budget_item_user_id_idx").on(t.userId)],
 );
 
+/** A planned income or outcome; a repeating one is copied into every month ahead. */
+export const moneyItem = pgTable(
+  "money_item",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    kind: entryKind("kind").notNull(),
+    name: text("name").notNull(),
+    categoryId: uuid("category_id").references(() => financeCategory.id, {
+      onDelete: "set null",
+    }),
+    amountCents: integer("amount_cents").notNull(),
+    /** Day of month (1–31) the item falls on. */
+    day: integer("day").notNull(),
+    repeats: boolean("repeats").notNull().default(false),
+    /** First month (`YYYY-MM`) the item appears in. */
+    startMonth: text("start_month").notNull(),
+    /** Last month copied into; later months are filled as time passes. */
+    filledThrough: text("filled_through"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (t) => [index("money_item_user_id_idx").on(t.userId)],
+);
+
 export const financeEntry = pgTable(
   "finance_entry",
   {
@@ -461,6 +488,10 @@ export const financeEntry = pgTable(
     budgetItemId: uuid("budget_item_id").references(() => budgetItem.id, {
       onDelete: "set null",
     }),
+    /** Set when the entry is a month's copy of an In/Out item. */
+    moneyItemId: uuid("money_item_id").references(() => moneyItem.id, {
+      onDelete: "set null",
+    }),
     date: date("date").notNull(),
     note: text("note"),
     /** Income still to receive or a payment still to make; left out of totals. */
@@ -471,6 +502,7 @@ export const financeEntry = pgTable(
   (t) => [
     index("finance_entry_user_date_idx").on(t.userId, t.date),
     index("finance_entry_budget_item_idx").on(t.budgetItemId),
+    index("finance_entry_money_item_idx").on(t.moneyItemId),
   ],
 );
 
@@ -508,5 +540,6 @@ export type TaskType = (typeof taskType.enumValues)[number];
 export type FinanceCategory = typeof financeCategory.$inferSelect;
 export type BudgetItem = typeof budgetItem.$inferSelect;
 export type FinanceEntry = typeof financeEntry.$inferSelect;
+export type MoneyItem = typeof moneyItem.$inferSelect;
 export type SavingsGoal = typeof savingsGoal.$inferSelect;
 export type EntryKind = (typeof entryKind.enumValues)[number];

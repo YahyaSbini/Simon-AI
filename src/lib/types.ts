@@ -57,9 +57,21 @@ export type EntryItem = {
   amountCents: number;
   categoryId: string | null;
   budgetItemId: string | null;
+  moneyItemId: string | null;
   date: string;
   note: string | null;
   expected: boolean;
+};
+
+export type MoneyItemRow = {
+  id: string;
+  kind: EntryKind;
+  name: string;
+  categoryId: string | null;
+  amountCents: number;
+  day: number;
+  repeats: boolean;
+  startMonth: string;
 };
 
 export type BudgetItemRow = {
