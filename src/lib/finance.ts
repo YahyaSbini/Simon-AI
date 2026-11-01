@@ -13,6 +13,7 @@ import {
   financeSettings,
   savingsGoal,
 } from "@/db/schema";
+import { activeIn } from "@/lib/budget";
 import { addMonths, dueDateIn, monthBounds, monthOf } from "@/lib/money";
 import { fillItemMonths } from "@/lib/money-items";
 import type {
@@ -254,6 +255,32 @@ export async function getYearSummary(
     else summary.outcomeCents += row.amountCents;
   }
   return months;
+}
+
+export type BudgetMonthSummary = {
+  month: string;
+  plannedCents: number;
+  spentCents: number;
+};
+
+/** Budget planned and settled spending per month of `year`; expected entries are left out. */
+export async function getBudgetYearSummary(
+  userId: string,
+  year: number,
+  today: string,
+): Promise<BudgetMonthSummary[]> {
+  const [summary, items] = await Promise.all([
+    getYearSummary(userId, year, today),
+    getBudgetItems(userId),
+  ]);
+  return summary.map((item) => ({
+    month: item.month,
+    plannedCents: activeIn(items, item.month).reduce(
+      (sum, row) => sum + row.amountCents,
+      0,
+    ),
+    spentCents: item.outcomeCents,
+  }));
 }
 
 /** Everything a month view needs, after posting bills that came due. */

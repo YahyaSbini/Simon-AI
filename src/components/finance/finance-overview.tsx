@@ -207,11 +207,7 @@ export function FinanceOverview({
 
         {totals.budgetedCents > 0 ? (
           <Link
-            href={
-              month === monthOf(today)
-                ? "/finance/budget"
-                : `/finance/budget?month=${month}`
-            }
+            href={`/finance/budget?month=${month}`}
             className="group focus-visible:ring-ring -mx-2 block space-y-2 rounded-lg px-2 py-2 outline-none hover:bg-muted/50 focus-visible:ring-2"
           >
             <div className="flex items-baseline justify-between gap-3 text-sm">
