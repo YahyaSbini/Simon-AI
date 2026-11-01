@@ -3,7 +3,12 @@
 import { Check, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Segmented, sendJson } from "@/components/finance/finance-bits";
+import {
+  CollapseBody,
+  CollapseToggle,
+  useClosedSections,
+} from "@/components/collapsible";
+import { sendJson } from "@/components/finance/finance-bits";
 import { selectClass } from "@/components/task-detail";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,9 +36,9 @@ type Draft = {
   repeats: boolean;
 };
 
-const kindOptions: { value: EntryKind; label: string }[] = [
-  { value: "income", label: "Income" },
-  { value: "expense", label: "Outcome" },
+const sections: { kind: EntryKind; title: string; placeholder: string }[] = [
+  { kind: "income", title: "Income", placeholder: "e.g. Salary" },
+  { kind: "expense", title: "Outcome", placeholder: "e.g. Rent" },
 ];
 
 export function ItemsView({
@@ -47,7 +52,9 @@ export function ItemsView({
 }) {
   const [items, setItems] = useState(initialItems);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [addingKind, setAddingKind] = useState<EntryKind | null>(null);
   const [saving, setSaving] = useState(false);
+  const { closed, setOpen } = useClosedSections("finance-items-closed");
   const categoryName = useMemo(
     () => new Map(categories.map((item) => [item.id, item.name])),
     [categories],
@@ -98,6 +105,7 @@ export function ItemsView({
       return false;
     }
     setItems((current) => [...current, result.item]);
+    setAddingKind(null);
     return true;
   }
 
@@ -133,7 +141,7 @@ export function ItemsView({
   function renderItem(item: MoneyItemRow) {
     if (editingId === item.id) {
       return (
-        <li key={item.id} className="py-1">
+        <li key={item.id} className="list-none py-1">
           <ItemForm
             initial={{
               kind: item.kind,
@@ -144,9 +152,11 @@ export function ItemsView({
               startMonth: item.startMonth,
               repeats: item.repeats,
             }}
+            placeholder={item.name}
             categories={categories}
             amountNote={`A new amount applies from ${formatMonth(addMonths(currentMonth, 1))}.`}
             onSubmit={(draft) => updateItem(item, draft)}
+            editing
             onCancel={() => setEditingId(null)}
           />
         </li>
@@ -163,119 +173,133 @@ export function ItemsView({
       .join(" · ");
 
     return (
-      <li key={item.id} className="group/row flex items-center gap-3 py-3">
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{item.name}</p>
-          <p className="text-muted-foreground truncate text-sm">{detail}</p>
+      <li key={item.id} className="group/row py-1.5">
+        <div className="flex items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-medium">{item.name}</p>
+            <p className="text-muted-foreground truncate text-sm">{detail}</p>
+          </div>
+          <span
+            className={cn(
+              "shrink-0 text-sm tabular-nums",
+              item.kind === "income" && "font-medium",
+            )}
+          >
+            {formatMoney(
+              item.kind === "income" ? item.amountCents : -item.amountCents,
+              { sign: true },
+            )}
+          </span>
+          <span className="flex shrink-0 items-center opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 max-md:opacity-100">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label={`Edit ${item.name}`}
+              onClick={() => setEditingId(item.id)}
+            >
+              <Pencil />
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="hover:text-destructive"
+              aria-label={`Remove ${item.name}`}
+              onClick={() => removeItem(item)}
+            >
+              <Trash2 />
+            </Button>
+          </span>
         </div>
-        <span
-          className={cn(
-            "shrink-0 text-sm tabular-nums",
-            item.kind === "income" && "font-medium",
-          )}
-        >
-          {formatMoney(
-            item.kind === "income" ? item.amountCents : -item.amountCents,
-            { sign: true },
-          )}
-        </span>
-        <span className="flex shrink-0 items-center opacity-0 transition-opacity group-focus-within/row:opacity-100 group-hover/row:opacity-100 max-md:opacity-100">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Edit ${item.name}`}
-            onClick={() => setEditingId(item.id)}
-          >
-            <Pencil />
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="hover:text-destructive"
-            aria-label={`Remove ${item.name}`}
-            onClick={() => removeItem(item)}
-          >
-            <Trash2 />
-          </Button>
-        </span>
       </li>
     );
   }
 
   return (
     <div className="space-y-8">
-      <ItemGroup
-        title="Income"
-        empty="Salary or any money that comes in, once or every month."
-      >
-        {items.filter((item) => item.kind === "income").map(renderItem)}
-      </ItemGroup>
-      <ItemGroup
-        title="Outcome"
-        empty="Rent, subscriptions or any payment, once or every month."
-      >
-        {items.filter((item) => item.kind === "expense").map(renderItem)}
-      </ItemGroup>
-      <ItemForm
-        initial={{
-          kind: "expense",
-          name: "",
-          amount: "",
-          categoryId: "",
-          day: "1",
-          startMonth: currentMonth,
-          repeats: true,
-        }}
-        categories={categories}
-        saving={saving}
-        onSubmit={createItem}
-      />
+      {sections.map((section) => {
+        const open = !closed.has(section.kind);
+        const rows = items.filter((item) => item.kind === section.kind);
+        return (
+          <section key={section.kind} className="space-y-3">
+            <h2 className="font-heading text-xl">
+              <CollapseToggle
+                open={open}
+                controls={`items-${section.kind}`}
+                count={rows.length}
+                onToggle={() => setOpen([section.kind], !open)}
+              >
+                {section.title}
+              </CollapseToggle>
+            </h2>
+            <CollapseBody
+              id={`items-${section.kind}`}
+              open={open}
+              className="space-y-3"
+            >
+              {rows.length ? (
+                <ul className="list-disc space-y-1 pl-5 marker:text-muted-foreground">
+                  {rows.map(renderItem)}
+                </ul>
+              ) : null}
+              {addingKind === section.kind ? (
+                <ItemForm
+                  initial={{
+                    kind: section.kind,
+                    name: "",
+                    amount: "",
+                    categoryId: "",
+                    day: "1",
+                    startMonth: currentMonth,
+                    repeats: true,
+                  }}
+                  placeholder={section.placeholder}
+                  categories={categories}
+                  saving={saving}
+                  onSubmit={createItem}
+                  onCancel={() => setAddingKind(null)}
+                />
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground -ml-2"
+                  onClick={() => setAddingKind(section.kind)}
+                >
+                  <Plus data-icon="inline-start" />
+                  Add {section.title.toLowerCase()}
+                </Button>
+              )}
+            </CollapseBody>
+          </section>
+        );
+      })}
     </div>
-  );
-}
-
-function ItemGroup({
-  title,
-  empty,
-  children,
-}: {
-  title: string;
-  empty: string;
-  children: React.ReactNode[];
-}) {
-  return (
-    <section>
-      <h2 className="text-muted-foreground border-border border-b pb-2 text-xs tracking-wide uppercase">
-        {title}
-      </h2>
-      {children.length ? (
-        <ul className="divide-border divide-y">{children}</ul>
-      ) : (
-        <p className="text-muted-foreground py-3 text-sm">{empty}</p>
-      )}
-    </section>
   );
 }
 
 function ItemForm({
   initial,
+  placeholder,
   categories,
   amountNote,
+  editing = false,
   saving = false,
   onSubmit,
   onCancel,
 }: {
   initial: Draft;
+  placeholder: string;
   categories: CategoryItem[];
   amountNote?: string;
+  editing?: boolean;
   saving?: boolean;
   onSubmit: (draft: Draft) => Promise<boolean>;
   onCancel?: () => void;
 }) {
   const [draft, setDraft] = useState<Draft>(initial);
-  const editing = Boolean(onCancel);
   const kindCategories = categories.filter((item) => item.kind === draft.kind);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -287,22 +311,16 @@ function ItemForm({
   return (
     <form
       onSubmit={submit}
-      className={cn("space-y-2 rounded-md", editing && "bg-muted/50 -mx-2 p-2")}
+      className="bg-muted/50 -mx-2 space-y-2 rounded-md p-2"
     >
       <div className="flex flex-wrap items-center gap-2">
-        <Segmented
-          label="Income or outcome"
-          value={draft.kind}
-          options={kindOptions}
-          onChange={(kind) => setDraft({ ...draft, kind, categoryId: "" })}
-        />
         <Input
           value={draft.name}
           onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-          placeholder={draft.kind === "income" ? "e.g. Salary" : "e.g. Rent"}
+          placeholder={placeholder}
           aria-label="Name"
           maxLength={80}
-          autoFocus={editing}
+          autoFocus
           className="min-w-36 flex-1"
         />
         <Input
@@ -392,7 +410,7 @@ function ItemForm({
             ) : (
               <>
                 <Plus data-icon="inline-start" />
-                Add item
+                Add
               </>
             )}
           </Button>
