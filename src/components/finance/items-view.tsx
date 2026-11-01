@@ -236,15 +236,29 @@ export function ItemsView({
         const rows = items.filter((item) => item.kind === section.kind);
         return (
           <section key={section.kind} className="space-y-3">
-            <h2 className="font-heading text-xl">
+            <h2 className="font-heading flex items-center gap-1 text-xl">
               <CollapseToggle
                 open={open}
                 controls={`items-${section.kind}`}
                 count={rows.length}
                 onToggle={() => setOpen([section.kind], !open)}
+                className="w-auto"
               >
                 {section.title}
               </CollapseToggle>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="text-muted-foreground"
+                aria-label={`Add ${section.title.toLowerCase()}`}
+                onClick={() => {
+                  setOpen([section.kind], true);
+                  setAddingKind(section.kind);
+                }}
+              >
+                <Plus />
+              </Button>
             </h2>
             <CollapseBody
               id={`items-${section.kind}`}
@@ -273,18 +287,7 @@ export function ItemsView({
                   onSubmit={createItem}
                   onCancel={() => setAddingKind(null)}
                 />
-              ) : (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="text-muted-foreground -ml-2"
-                  onClick={() => setAddingKind(section.kind)}
-                >
-                  <Plus data-icon="inline-start" />
-                  Add {section.title.toLowerCase()}
-                </Button>
-              )}
+              ) : null}
             </CollapseBody>
           </section>
         );
