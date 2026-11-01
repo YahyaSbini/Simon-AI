@@ -137,7 +137,7 @@ export function AppShell({
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
   const moduleId = moduleFor(pathname)?.id;
-  const wide = moduleId === "my-day";
+  const wide = moduleId === "my-day" || moduleId === "finance";
 
   return (
     <div className="flex min-h-dvh">
