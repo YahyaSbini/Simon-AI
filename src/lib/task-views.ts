@@ -2,7 +2,21 @@ import { toDateKey, today } from "@/lib/dates";
 import type { TaskItem } from "@/lib/types";
 
 export type TaskViewKey =
-  "all" | "important" | "planned" | "list" | "my-day" | "completed";
+  | "all"
+  | "important"
+  | "planned"
+  | "list"
+  | "my-day"
+  | "later"
+  | "completed";
+
+export type PlannedFilter = "all" | "planned" | "unplanned";
+
+/** Tasks page filter: planned means the task has a due date. */
+export function plannedMatches(task: TaskItem, filter: PlannedFilter): boolean {
+  if (filter === "all") return true;
+  return (task.dueAt !== null) === (filter === "planned");
+}
 
 /** Client-side mirror of the server queries in `data.ts`, so live edits stay in the right views. */
 export function taskMatches(
@@ -10,9 +24,11 @@ export function taskMatches(
   task: TaskItem,
   options: { listId?: string | null; date?: string } = {},
 ): boolean {
+  if (view === "completed") return task.completed;
+  if (view === "later") return !task.completed && task.later;
+  if (task.later) return false;
+
   switch (view) {
-    case "completed":
-      return task.completed;
     case "all":
       return !task.completed;
     case "important":

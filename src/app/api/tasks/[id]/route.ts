@@ -20,6 +20,7 @@ const updateTaskSchema = z.object({
   countInTime: z.boolean().optional(),
   dueAt: timestamp.nullish(),
   myDayDate: dateKey.nullish(),
+  later: z.boolean().optional(),
   completed: z.boolean().optional(),
 });
 

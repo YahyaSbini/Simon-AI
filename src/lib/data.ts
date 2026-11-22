@@ -43,7 +43,8 @@ import type {
   TaskItem,
 } from "@/lib/types";
 
-export type TaskView = "all" | "important" | "planned" | "list" | "completed";
+export type TaskView =
+  "all" | "important" | "planned" | "list" | "later" | "completed";
 
 export async function getLists(userId: string): Promise<ListItem[]> {
   const rows = await db
@@ -76,6 +77,9 @@ export async function getTasks(
       ? isNotNull(task.completedAt)
       : isNull(task.completedAt),
   );
+  if (view !== "completed") {
+    scope.push(eq(task.later, view === "later"));
+  }
 
   const rows = await db
     .select()
@@ -125,6 +129,7 @@ export function serializeTask(row: Task, steps: TaskStep[] = []): TaskItem {
     activityId: row.activityId,
     dueAt: row.dueAt?.toISOString() ?? null,
     myDayDate: row.myDayDate,
+    later: row.later,
     completed: row.completedAt !== null,
     completedAt: row.completedAt?.toISOString() ?? null,
     steps: steps
@@ -331,6 +336,7 @@ export async function getMyDayTasks(
   const relevant = rows.filter(
     (row) =>
       row.completedAt === null &&
+      !row.later &&
       (row.myDayDate === date || (row.dueAt && toDateKey(row.dueAt) <= date)),
   );
 
