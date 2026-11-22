@@ -119,6 +119,8 @@ export const task = pgTable(
     }),
     dueAt: timestamp("due_at"),
     myDayDate: date("my_day_date"),
+    /** Parked for the future: shown only on the Later page. */
+    later: boolean("later").notNull().default(false),
     position: integer("position").notNull().default(0),
     completedAt: timestamp("completed_at"),
     createdAt: timestamp("created_at").notNull().defaultNow(),

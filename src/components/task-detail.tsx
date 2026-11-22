@@ -1,6 +1,6 @@
 "use client";
 
-import { Sun, Trash2, X } from "lucide-react";
+import { Hourglass, ListTodo, Sun, Trash2, X } from "lucide-react";
 import { StepEditor } from "@/components/step-editor";
 import { LinkFields, needsLink } from "@/components/task-links";
 import { parseMinutes, StarButton } from "@/components/task-bits";
@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { toDateKey, today } from "@/lib/dates";
+import { laterChanges } from "@/lib/task-views";
 import {
   type ListItem,
   priorities,
@@ -203,17 +204,30 @@ export function TaskDetail({
           <Button
             variant={inMyDay ? "secondary" : "outline"}
             className="w-full justify-start"
-            onClick={() =>
-              onChange(
-                task,
-                { myDayDate: inMyDay ? null : today() },
-                { myDayDate: inMyDay ? null : today() },
-              )
-            }
+            onClick={() => {
+              const changes = inMyDay
+                ? { myDayDate: null }
+                : { myDayDate: today(), later: false };
+              onChange(task, changes, changes);
+            }}
           >
             <Sun />
             {inMyDay ? "Added to My Day" : "Add to My Day"}
           </Button>
+
+          {!task.completed && (
+            <Button
+              variant="outline"
+              className="w-full justify-start"
+              onClick={() => {
+                const changes = laterChanges(task);
+                onChange(task, changes, changes);
+              }}
+            >
+              {task.later ? <ListTodo /> : <Hourglass />}
+              {task.later ? "Move to Tasks" : "Move to Later"}
+            </Button>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">

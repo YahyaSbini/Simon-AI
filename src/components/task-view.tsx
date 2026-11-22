@@ -1,7 +1,21 @@
 "use client";
 
-import { CalendarClock, Clock, Sun, Timer, Trash2 } from "lucide-react";
-import { useCallback, useMemo, useState, useTransition } from "react";
+import {
+  CalendarClock,
+  Clock,
+  Hourglass,
+  ListTodo,
+  Sun,
+  Timer,
+  Trash2,
+} from "lucide-react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useTransition,
+} from "react";
 import { SortableList, SortableRow } from "@/components/sortable-list";
 import {
   parseMinutes,
@@ -25,6 +39,9 @@ import {
   type CompletedSort,
   dueDateFirst,
   isOverdue,
+  laterChanges,
+  type PlannedFilter,
+  plannedMatches,
   sortCompleted,
   taskMatches,
   type TaskViewKey,
@@ -56,9 +73,12 @@ export function TaskView({
   completedSort?: CompletedSort;
 }) {
   const store = useTaskStore();
+  const [plannedFilter, setPlannedFilter] = usePlannedFilter(view === "all");
   const matches = useCallback(
-    (task: TaskItem) => taskMatches(view, task, { listId }),
-    [view, listId],
+    (task: TaskItem) =>
+      taskMatches(view, task, { listId }) &&
+      (view !== "all" || plannedMatches(task, plannedFilter)),
+    [view, listId, plannedFilter],
   );
   const unsorted = useTasks(initialTasks, matches);
   const tasks = useMemo(
@@ -106,6 +126,7 @@ export function TaskView({
           ? { parentTaskId: link.parentId, activityId: link.activityId }
           : {}),
         listId,
+        ...(view === "later" ? { later: true } : {}),
       });
       if (created) {
         setTitle("");
@@ -169,9 +190,34 @@ export function TaskView({
         </form>
       )}
 
+      {view === "all" && (
+        <div
+          role="group"
+          aria-label="Filter tasks"
+          className="flex items-center gap-1"
+        >
+          <span className="text-muted-foreground mr-1 text-sm">Show</span>
+          {plannedOptions.map((option) => (
+            <Button
+              key={option.value}
+              size="sm"
+              variant={plannedFilter === option.value ? "secondary" : "ghost"}
+              aria-pressed={plannedFilter === option.value}
+              onClick={() => setPlannedFilter(option.value)}
+            >
+              {option.label}
+            </Button>
+          ))}
+        </div>
+      )}
+
       {tasks.length === 0 ? (
         <p className="text-muted-foreground border-border rounded-lg border border-dashed px-4 py-10 text-center">
-          {emptyMessage}
+          {view === "all" && plannedFilter !== "all"
+            ? plannedFilter === "planned"
+              ? "No tasks with a due date."
+              : "Every task has a due date."
+            : emptyMessage}
         </p>
       ) : (
         <TaskRows
@@ -193,6 +239,14 @@ export function TaskView({
               { important: !item.important },
             )
           }
+          onMoveLater={
+            completedView
+              ? undefined
+              : (item) => {
+                  const changes = laterChanges(item);
+                  store.patchTask(item, changes, changes);
+                }
+          }
           onDelete={deleteTask}
         />
       )}
@@ -209,6 +263,34 @@ export function TaskView({
   );
 }
 
+const plannedStorageKey = "simon-tasks-planned-filter";
+
+const plannedOptions: { value: PlannedFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "planned", label: "Planned" },
+  { value: "unplanned", label: "Unplanned" },
+];
+
+function usePlannedFilter(enabled: boolean) {
+  const [filter, setFilter] = useState<PlannedFilter>("all");
+
+  useEffect(() => {
+    if (!enabled) return;
+    const saved = localStorage.getItem(plannedStorageKey);
+    if (saved === "planned" || saved === "unplanned") setFilter(saved);
+  }, [enabled]);
+
+  function choose(value: PlannedFilter) {
+    setFilter(value);
+    localStorage.setItem(plannedStorageKey, value);
+  }
+
+  return [filter, choose] as const;
+}
+
+const rowActionClass =
+  "size-8 transition-opacity md:opacity-0 md:group-hover/row:opacity-100 md:group-focus-within/row:opacity-100";
+
 export function TaskRows({
   tasks,
   sortable = false,
@@ -216,6 +298,7 @@ export function TaskRows({
   onOpen,
   onToggle,
   onStar,
+  onMoveLater,
   onDelete,
 }: {
   tasks: TaskItem[];
@@ -224,6 +307,7 @@ export function TaskRows({
   onOpen: (id: string) => void;
   onToggle: (item: TaskItem) => void;
   onStar: (item: TaskItem) => void;
+  onMoveLater?: (item: TaskItem) => void;
   onDelete: (item: TaskItem) => void;
 }) {
   return (
@@ -277,11 +361,28 @@ export function TaskRows({
             onStar={() => onStar(item)}
           />
 
+          {onMoveLater && (
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={
+                item.later
+                  ? `Move "${item.title}" to Tasks`
+                  : `Move "${item.title}" to Later`
+              }
+              title={item.later ? "Move to Tasks" : "Move to Later"}
+              className={rowActionClass}
+              onClick={() => onMoveLater(item)}
+            >
+              {item.later ? <ListTodo /> : <Hourglass />}
+            </Button>
+          )}
+
           <Button
             variant="ghost"
             size="icon"
             aria-label={`Delete "${item.title}"`}
-            className="size-8 transition-opacity md:opacity-0 md:group-hover/row:opacity-100 md:group-focus-within/row:opacity-100"
+            className={rowActionClass}
             onClick={() => onDelete(item)}
           >
             <Trash2 />

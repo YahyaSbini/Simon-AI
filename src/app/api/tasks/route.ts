@@ -19,6 +19,7 @@ const createTaskSchema = z.object({
   countInTime: z.boolean().optional(),
   dueAt: timestamp.nullish(),
   myDayDate: dateKey.nullish(),
+  later: z.boolean().optional(),
 });
 
 export async function GET(request: Request) {

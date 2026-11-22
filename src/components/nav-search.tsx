@@ -14,7 +14,9 @@ const empty: Results = { tasks: [], routines: [] };
 function taskHref(task: TaskItem) {
   const base = task.completed
     ? "/completed"
-    : task.listId
+    : task.later
+      ? "/later"
+      : task.listId
       ? `/lists/${task.listId}`
       : "/tasks";
   return `${base}?open=${task.id}`;

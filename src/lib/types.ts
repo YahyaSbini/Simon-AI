@@ -112,6 +112,7 @@ export type TaskItem = {
   activityId: string | null;
   dueAt: string | null;
   myDayDate: string | null;
+  later: boolean;
   completed: boolean;
   completedAt: string | null;
   steps: StepItem[];

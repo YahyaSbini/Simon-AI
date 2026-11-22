@@ -34,6 +34,7 @@ type TaskStore = {
     listId?: string | null;
     myDayDate?: string | null;
     dueAt?: string | null;
+    later?: boolean;
   }) => Promise<TaskItem | null>;
   patchTask: (item: TaskItem, changes: Partial<TaskItem>, body: object) => void;
   deleteTask: (item: TaskItem) => void;
@@ -142,6 +143,7 @@ export function TaskStoreProvider({ children }: { children: React.ReactNode }) {
         activityId: task.activityId ?? null,
         dueAt: task.dueAt ?? null,
         myDayDate: task.myDayDate ?? null,
+        later: task.later ?? false,
         completed: false,
         completedAt: null,
         steps: [],

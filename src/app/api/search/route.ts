@@ -4,7 +4,7 @@ import { today } from "@/lib/dates";
 import { requireUserId } from "@/lib/session";
 import { searchMatches } from "@/lib/task-views";
 
-/** Tasks (open and ticked) and routines matching `q`, for the navbar search. */
+/** Tasks (open, later and ticked) and routines matching `q`, for the navbar search. */
 export async function GET(request: Request) {
   const userId = await requireUserId();
 
@@ -18,14 +18,15 @@ export async function GET(request: Request) {
     return NextResponse.json({ tasks: [], routines: [] });
   }
 
-  const [open, done, routines] = await Promise.all([
+  const [open, later, done, routines] = await Promise.all([
     getTasks(userId, "all"),
+    getTasks(userId, "later"),
     getTasks(userId, "completed"),
     getRoutines(userId, today()),
   ]);
 
   return NextResponse.json({
-    tasks: [...open, ...done]
+    tasks: [...open, ...later, ...done]
       .filter((item) => searchMatches(item, q))
       .slice(0, 20),
     routines: routines.filter((item) => searchMatches(item, q)).slice(0, 10),
