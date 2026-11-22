@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { toDateKey, today } from "@/lib/dates";
+import { laterChanges } from "@/lib/task-views";
 import {
   type ListItem,
   priorities,
@@ -218,9 +219,10 @@ export function TaskDetail({
             <Button
               variant="outline"
               className="w-full justify-start"
-              onClick={() =>
-                onChange(task, { later: !task.later }, { later: !task.later })
-              }
+              onClick={() => {
+                const changes = laterChanges(task);
+                onChange(task, changes, changes);
+              }}
             >
               {task.later ? <ListTodo /> : <Hourglass />}
               {task.later ? "Move to Tasks" : "Move to Later"}

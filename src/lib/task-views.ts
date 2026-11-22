@@ -48,6 +48,11 @@ export function taskMatches(
   }
 }
 
+/** Changes for moving a task to/from Later; parking it also takes it off My Day. */
+export function laterChanges(task: TaskItem): Partial<TaskItem> {
+  return task.later ? { later: false } : { later: true, myDayDate: null };
+}
+
 export function isOverdue(task: TaskItem, now = new Date()): boolean {
   return !task.completed && task.dueAt !== null && new Date(task.dueAt) < now;
 }

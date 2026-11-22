@@ -39,6 +39,7 @@ import {
   type CompletedSort,
   dueDateFirst,
   isOverdue,
+  laterChanges,
   type PlannedFilter,
   plannedMatches,
   sortCompleted,
@@ -241,12 +242,10 @@ export function TaskView({
           onMoveLater={
             completedView
               ? undefined
-              : (item) =>
-                  store.patchTask(
-                    item,
-                    { later: !item.later },
-                    { later: !item.later },
-                  )
+              : (item) => {
+                  const changes = laterChanges(item);
+                  store.patchTask(item, changes, changes);
+                }
           }
           onDelete={deleteTask}
         />
