@@ -27,4 +27,5 @@ async function handle(request: Request) {
   return runWithKey(owner, () => transport.handleRequest(request));
 }
 
-export { handle as DELETE, handle as GET, handle as POST };
+// No GET: stateless, so there is no server-to-client event stream to open.
+export { handle as DELETE, handle as POST };
