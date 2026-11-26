@@ -43,6 +43,11 @@ export const routineInput = z.object({
   active: z.boolean().optional(),
 });
 
+/** Partial routine update; unlike `routineInput.partial()`, a missing interval stays unchanged. */
+export const routineUpdate = routineInput
+  .extend({ interval: z.number().int().min(1).max(365) })
+  .partial();
+
 /** Inclusive range check shared by create and (merged) update. */
 export const calendarCompletionInput = z.object({
   eventId: z.string().min(1).max(1024),
