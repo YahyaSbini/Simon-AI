@@ -67,10 +67,22 @@ export async function deleteApiKey(userId: string, id: string) {
 }
 
 /** The key from `Authorization: Bearer <key>`, or `?key=` for clients that can't set headers. */
+const keyPattern = new RegExp(`${prefix}[A-Za-z0-9_-]+`);
+
+/** Finds the key in Authorization (with or without "Bearer"), X-API-Key or ?key=. */
 export function keyFromRequest(request: Request): string | null {
-  const header = request.headers.get("authorization");
-  const bearer = header?.match(/^Bearer\s+(.+)$/i)?.[1]?.trim();
-  return bearer || new URL(request.url).searchParams.get("key");
+  const sources = [
+    request.headers.get("authorization"),
+    request.headers.get("x-api-key"),
+    new URL(request.url).searchParams.get("key"),
+  ];
+
+  for (const source of sources) {
+    const key = source?.match(keyPattern)?.[0];
+    if (key) return key;
+  }
+
+  return null;
 }
 
 export async function findApiKeyOwner(
