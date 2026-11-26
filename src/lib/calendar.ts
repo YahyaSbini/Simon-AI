@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { headers } from "next/headers";
+import { currentKeyOwner } from "@/lib/key-scope";
 import { db } from "@/db";
 import { account, calendarEventCompletion } from "@/db/schema";
 import { auth, calendarScope, googleConfigured } from "@/lib/auth";
@@ -74,7 +75,8 @@ async function fetchGoogleEvents(
   try {
     const token = await auth.api.getAccessToken({
       body: { accountId: row.id, userId },
-      headers: await headers(),
+      // An API key request has no session; Better Auth then trusts `userId`.
+      headers: currentKeyOwner() ? undefined : await headers(),
     });
     accessToken = token.accessToken;
   } catch {

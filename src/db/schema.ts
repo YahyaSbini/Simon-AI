@@ -551,6 +551,24 @@ export const savingsGoal = pgTable(
   (t) => [index("savings_goal_user_id_idx").on(t.userId)],
 );
 
+export const apiKey = pgTable(
+  "api_key",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    keyHash: text("key_hash").notNull().unique(),
+    /** First characters of the key, shown so the user can tell keys apart. */
+    preview: text("preview").notNull(),
+    timeZone: text("time_zone").notNull().default("UTC"),
+    lastUsedAt: timestamp("last_used_at"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("api_key_user_id_idx").on(t.userId)],
+);
+
 export type List = typeof list.$inferSelect;
 export type DayBlock = typeof dayBlock.$inferSelect;
 export type Activity = typeof activity.$inferSelect;
@@ -570,4 +588,5 @@ export type BudgetItem = typeof budgetItem.$inferSelect;
 export type FinanceEntry = typeof financeEntry.$inferSelect;
 export type MoneyItem = typeof moneyItem.$inferSelect;
 export type SavingsGoal = typeof savingsGoal.$inferSelect;
+export type ApiKey = typeof apiKey.$inferSelect;
 export type EntryKind = (typeof entryKind.enumValues)[number];

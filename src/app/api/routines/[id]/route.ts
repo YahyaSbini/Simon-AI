@@ -4,9 +4,7 @@ import { db } from "@/db";
 import { routine } from "@/db/schema";
 import { requireUserId } from "@/lib/session";
 import { resolveLinks } from "@/lib/task-links";
-import { routineInput, validDateRange } from "@/lib/validation";
-
-const updateRoutineSchema = routineInput.partial();
+import { routineUpdate, validDateRange } from "@/lib/validation";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -17,7 +15,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const parsed = updateRoutineSchema.safeParse(await request.json());
+  const parsed = routineUpdate.safeParse(await request.json());
 
   if (!parsed.success) {
     return NextResponse.json(

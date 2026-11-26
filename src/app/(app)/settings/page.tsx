@@ -1,6 +1,8 @@
 import { redirect } from "next/navigation";
+import { AiAccess } from "@/components/ai-access";
 import { CalendarConnection } from "@/components/calendar-connection";
 import { SoundSetting } from "@/components/sound-setting";
+import { getApiKeys } from "@/lib/api-keys";
 import { getCalendarStatus } from "@/lib/calendar";
 import { getSession } from "@/lib/session";
 
@@ -11,7 +13,10 @@ export default async function SettingsPage() {
     redirect("/sign-in");
   }
 
-  const status = await getCalendarStatus(session.user.id);
+  const [status, keys] = await Promise.all([
+    getCalendarStatus(session.user.id),
+    getApiKeys(session.user.id),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -24,6 +29,7 @@ export default async function SettingsPage() {
 
       <CalendarConnection status={status} />
       <SoundSetting />
+      <AiAccess initialKeys={keys} />
     </div>
   );
 }
