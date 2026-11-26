@@ -2,7 +2,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { NextResponse } from "next/server";
 import { findApiKeyOwner, keyFromRequest } from "@/lib/api-keys";
 import { createSimonServer } from "@/lib/mcp/server";
-import { runAsUser } from "@/lib/session";
+import { runWithKey } from "@/lib/key-scope";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +24,7 @@ async function handle(request: Request) {
   });
   await server.connect(transport);
 
-  return runAsUser(owner.userId, () => transport.handleRequest(request));
+  return runWithKey(owner, () => transport.handleRequest(request));
 }
 
 export { handle as DELETE, handle as GET, handle as POST };

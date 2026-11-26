@@ -1,7 +1,11 @@
 import { headers } from "next/headers";
+import { currentKeyOwner } from "@/lib/key-scope";
 
-/** IANA zone from the edge (Vercel), falling back to the server's own zone. */
+/** The API key's zone, else the edge's (Vercel), else the server's own zone. */
 export async function getTimeZone(): Promise<string> {
+  const owner = currentKeyOwner();
+  if (owner) return owner.timeZone;
+
   const headerList = await headers();
   const zone = headerList.get("x-vercel-ip-timezone");
 
