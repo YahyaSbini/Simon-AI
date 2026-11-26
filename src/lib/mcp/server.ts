@@ -234,8 +234,15 @@ export function createSimonServer(owner: ApiKeyOwner): McpServer {
       },
       annotations: readOnly,
     },
-    async ({ view, listId }) =>
-      json({ tasks: await getTasks(userId, view, { listId }) }),
+    async ({ view, listId }) => {
+      if (view === "list" && !listId) {
+        return {
+          content: [{ type: "text", text: 'view "list" needs a listId.' }],
+          isError: true,
+        };
+      }
+      return json({ tasks: await getTasks(userId, view, { listId }) });
+    },
   );
 
   server.registerTool(
