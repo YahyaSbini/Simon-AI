@@ -41,7 +41,7 @@ Optional. Create an OAuth client (Web application) in Google Cloud, enable the C
 
 Assistants like Manus can read and change Simon data through the MCP server at
 `<BETTER_AUTH_URL>/api/mcp` (Streamable HTTP). Create a key in Settings → AI access and send it as
-`Authorization: Bearer <key>` (or `?key=<key>` for clients that only take a URL). Tools reuse the
+`Authorization: Bearer <key>` (the `Bearer` word is optional; `X-API-Key: <key>` or `?key=<key>` also work). Tools reuse the
 API route handlers, so they share the same validation and rules. Keys are stored as SHA-256 hashes
 and can only be managed from a signed-in browser.
 
